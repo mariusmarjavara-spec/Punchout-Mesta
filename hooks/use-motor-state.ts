@@ -73,6 +73,15 @@ export interface Schema {
   confirmedAt?: string;
   forceSkippedAt?: string;
   linkedEntries?: number[];
+  /** Pins the SchemaRegistryEntry.version this instance was created under
+   * (lib/organization/schema-registry.mjs). Optional today because motor.js
+   * has no dynamic registry yet — every schema instance it creates is
+   * implicitly against the one hardcoded definition. Adding this now
+   * (additive, no behavior change) is what lets a future dynamic-schema
+   * motor resolve an already-open instance back to its exact original
+   * definition instead of a newer one, per the registry's versioning
+   * invariant. */
+  schemaVersion?: number;
 }
 
 export interface ExternalTask {
