@@ -600,15 +600,34 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
   const isHandrens = dayLog.phase === "ending";
   const saveLabel = isHandrens ? "Lagre" : "Lagre og bekreft";
 
+  const pendingFieldRef = useRef<{ key: string; value: unknown } | null>(null);
+
   const handleFieldChange = (key: string, value: unknown) => {
     // Update local state immediately for responsive UI
     setEditState(prev => ({ ...prev, [key]: value }));
     // Debounce motor update to avoid excessive localStorage writes
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    pendingFieldRef.current = { key, value };
     debounceRef.current = setTimeout(() => {
       motor.setSchemaField(schema.id, key, value);
+      pendingFieldRef.current = null;
     }, 250);
   };
+
+  // Flush a pending debounced write on unmount instead of letting it fire
+  // late (e.g. after "Lagre"/"Avbryt" already closed the overlay, or after
+  // the day was locked) or dropping the last keystroke silently.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        if (pendingFieldRef.current) {
+          motor.setSchemaField(schema.id, pendingFieldRef.current.key, pendingFieldRef.current.value);
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
