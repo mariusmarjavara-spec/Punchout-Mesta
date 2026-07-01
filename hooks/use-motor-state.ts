@@ -121,6 +121,28 @@ export interface StorageError {
   raw?: string;
 }
 
+export interface PromptQueueItem {
+  id: string;
+  kind: string;
+  target: string;
+  priority: number;
+  triggeredByRuleIds: string[];
+  explanation: Array<{ ruleId: string; factKey: string }>;
+}
+
+export interface CompletionStatus {
+  missingActions: PromptQueueItem[];
+  factsConsidered: number;
+  generatedAt: string;
+}
+
+export interface TelemetryEvent {
+  type: string;
+  occurredAt: string;
+  organizationId: string;
+  data: Record<string, unknown>;
+}
+
 export interface RuntimeConfig {
   lonnskoder: Array<{ kode: string; label: string }>;
   sjaDefaults: { sted?: string; arbeidsvarsling?: string } | null;
@@ -207,6 +229,9 @@ declare global {
       // Håndrens (flat verification)
       getUnresolvedItems: () => UnresolvedItem[];
       resolveItem: (id: string, action: string, data?: Record<string, unknown>) => void;
+      // Operational Completion Engine + Telemetry (Phase 6.5, read-only)
+      getCompletionStatus: () => CompletionStatus;
+      getTelemetryLog: () => TelemetryEvent[];
       // Export
       syncExports: () => void;
       // Report
@@ -307,7 +332,7 @@ export function useMotorSnapshot(): MotorSnapshot | undefined {
 }
 
 // Read-only motor functions that should NOT dispatch state-change events
-const READONLY_MOTOR_FUNCTIONS = new Set(['getSnapshot', 'isSchemaRequired', 'toggleVoice', 'buildHumanReadableReport', 'getUnresolvedItems', 'parseEntry']);
+const READONLY_MOTOR_FUNCTIONS = new Set(['getSnapshot', 'isSchemaRequired', 'toggleVoice', 'buildHumanReadableReport', 'getUnresolvedItems', 'parseEntry', 'getCompletionStatus', 'getTelemetryLog']);
 
 /**
  * Hook for calling motor functions.

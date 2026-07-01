@@ -5,6 +5,7 @@ var REACT_MODE = true;
 // --- Constants ---
 var STORAGE_KEY_CURRENT = "yournal_current_day";
 var STORAGE_KEY_HISTORY = "yournal_history";
+var STORAGE_KEY_TELEMETRY = "yournal_telemetry";
 
 // Fields that must NEVER be auto-filled (user responsibility)
 var NEVER_AUTO_FILL = ["konsekvens", "tiltak", "forslag_tiltak", "arsak", "vurdering"];
@@ -113,6 +114,24 @@ var ADMIN_CONFIG = {
   exportEndpoint: null,      // URL — null = export disabled
   exportHmacSecret: null     // string — null = no HMAC signature
 };
+
+// ============================================================
+// COMPLETION RULES (Phase 6.5) — data, not logic. Same Rule shape as
+// lib/rules/types.mjs (trigger/conditions/action/priority/affects).
+// Static for now, per the Phase 6 sequencing plan: Runtime loading is a
+// later integration step, not this one. Read only by
+// resolveMatchingCompletionRules() below — never by raw-text code.
+// ============================================================
+var COMPLETION_RULES = [
+  {
+    id: "rule_ruh_on_incident",
+    trigger: { event: "factObserved", factKey: "incidentReported" },
+    conditions: [{ field: "incidentReported", operator: "equals", value: true }],
+    action: { type: "requireSchema", target: "ruh" },
+    priority: 100,
+    affects: { schemaTypes: ["ruh"] }
+  }
+];
 
 // ============================================================
 // RUNTIME CONFIG — normalises window.PUNCHOUT_CONFIG once at init.
@@ -495,6 +514,10 @@ window.Motor = {
   // Håndrens (React mode — flat verification)
   getUnresolvedItems: getUnresolvedItems,
   resolveItem: resolveItem,
+
+  // Operational Completion Engine + Telemetry (Phase 6.5, read-only)
+  getCompletionStatus: getCompletionStatus,
+  getTelemetryLog: getTelemetryLog,
 
   // Pre-day
   showPreDayOverlay: showPreDayOverlay,
@@ -1744,6 +1767,7 @@ function submitEntry(entryText, entryType) {
     type: type,
     text: text
   });
+  emitTelemetry("ObservationCreated", { entryType: type });
 
   if (REACT_MODE) {
     // Phase 1: Entry visible immediately — UI never waits on parsing
@@ -4662,6 +4686,19 @@ function resolveItem(id, action, data) {
   // Recalculate readyToLock after every resolution
   readyToLock = (getUnresolvedCount() === 0);
   saveCurrentDay();
+
+  var isSchemaKind = id.indexOf("schema_") === 0 || id.indexOf("friksjon_") === 0;
+  var accepted = (action === "confirm");
+  var telemetryData = { id: id, action: action };
+  if (isSchemaKind) {
+    var resolvedSchemaId = id.indexOf("schema_") === 0 ? id.substring(7) : id.substring(9);
+    var resolvedSchema = findSchemaById(resolvedSchemaId);
+    if (resolvedSchema) telemetryData.schemaType = resolvedSchema.type;
+  }
+  emitTelemetry(
+    isSchemaKind ? (accepted ? "SchemaCompleted" : "SchemaSkipped") : (accepted ? "PromptAccepted" : "PromptDismissed"),
+    telemetryData
+  );
 }
 
 function resolveSchemaItem(schemaId, action) {
@@ -5073,6 +5110,7 @@ function syncExports() {
         var delay = Math.min(Math.pow(2, entry.retries) * 30000, 3600000);
         entry.nextAttempt = new Date(Date.now() + delay).toISOString();
       }
+      emitTelemetry(entry.status === "sent" ? "ExportSucceeded" : "ExportFailed", { exportId: targetExportId, error: entry.error });
       saveOutbox(ob);
       emitStateChange("outboxStatus");
     }).catch(function (err) {
@@ -5089,6 +5127,7 @@ function syncExports() {
       entry.error = err.message || "Network error";
       var delay = Math.min(Math.pow(2, entry.retries) * 30000, 3600000);
       entry.nextAttempt = new Date(Date.now() + delay).toISOString();
+      emitTelemetry("ExportFailed", { exportId: targetExportId, error: entry.error });
       saveOutbox(ob);
       emitStateChange("outboxStatus");
     });
@@ -5467,6 +5506,186 @@ function extractOvertid(allText) {
   var lower = allText.toLowerCase();
   if (lower.indexOf("overtid") !== -1) return "overtid";
   return "ordin\u00e6rt";
+}
+
+// ============================================================
+// TELEMETRY (Phase 6.5) \u2014 structured events only, no persondata beyond
+// what already exists (userId/deviceId, same as export). Capped,
+// append-only, same defensive try/catch pattern as loadOutbox/saveOutbox.
+// ============================================================
+var TELEMETRY_CAP = 500;
+
+function loadTelemetry() {
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY_TELEMETRY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error("Failed to load telemetry:", e);
+    return [];
+  }
+}
+
+function emitTelemetry(type, data) {
+  try {
+    var log = loadTelemetry();
+    log.push({
+      type: type,
+      occurredAt: new Date().toISOString(),
+      organizationId: ADMIN_CONFIG.userId ? ADMIN_CONFIG.hovedordre : "unknown",
+      data: data || {}
+    });
+    if (log.length > TELEMETRY_CAP) log = log.slice(log.length - TELEMETRY_CAP);
+    localStorage.setItem(STORAGE_KEY_TELEMETRY, JSON.stringify(log));
+  } catch (e) {
+    console.error("Failed to save telemetry:", e);
+    // Telemetry failure must never break the day \u2014 same posture as pushToHistory.
+  }
+}
+
+function getTelemetryLog() {
+  return loadTelemetry();
+}
+
+// ============================================================
+// FACT ENGINE (Phase 6.5) \u2014 Observation -> Extractors -> Facts.
+// Reuses extractRessurser() (already deterministic keyword extraction)
+// for machineUsed instead of a second equipment list. Rules below read
+// ONLY these Facts, never dayLog.entries[i].text directly.
+// ============================================================
+var COMPLETION_NUMBER_WORDS = { en: 1, ett: 1, to: 2, tre: 3, fire: 4, fem: 5, seks: 6, sju: 7, syv: 7, atte: 8, \u00e5tte: 8, ni: 9, ti: 10, elleve: 11, tolv: 12 };
+var COMPLETION_INCIDENT_KEYWORDS = ["nestenulykke", "ulykke", "skade", "uhell"];
+var COMPLETION_FUEL_KEYWORDS = ["diesel", "drivstoff"];
+
+function extractHoursFromText(text) {
+  var digitMatch = text.match(/(\d+(?:[.,]\d+)?)\s*timer?/i);
+  if (digitMatch) return parseFloat(digitMatch[1].replace(",", "."));
+  var wordMatch = text.match(/\b(\w+)\s+timer\b/i);
+  var n = wordMatch ? COMPLETION_NUMBER_WORDS[wordMatch[1].toLowerCase()] : undefined;
+  return n !== undefined ? n : null;
+}
+
+// Observation -> Fact[] for one entry. Swappable in spirit: each fact
+// kind below is one independent check, not a monolithic parser.
+function extractFactsFromEntry(entry, index) {
+  var facts = [];
+  var text = entry.text;
+  var lower = text.toLowerCase();
+
+  var hours = extractHoursFromText(text);
+  if (hours !== null) facts.push({ key: "hoursWorked", value: hours, sourceEntryIndex: index });
+
+  var machines = extractRessurser(text);
+  if (machines) {
+    for (var i = 0; i < machines.length; i++) {
+      facts.push({ key: "machineUsed", value: machines[i], sourceEntryIndex: index });
+    }
+  }
+
+  for (var k = 0; k < COMPLETION_INCIDENT_KEYWORDS.length; k++) {
+    if (lower.indexOf(COMPLETION_INCIDENT_KEYWORDS[k]) !== -1) {
+      facts.push({ key: "incidentReported", value: true, sourceEntryIndex: index });
+      break;
+    }
+  }
+  for (var f = 0; f < COMPLETION_FUEL_KEYWORDS.length; f++) {
+    if (lower.indexOf(COMPLETION_FUEL_KEYWORDS[f]) !== -1) {
+      facts.push({ key: "fuelConcern", value: true, sourceEntryIndex: index });
+      break;
+    }
+  }
+
+  var ordreMatch = text.match(/\b(\d{4,}-\d{1,4})\b/);
+  if (ordreMatch) {
+    facts.push({ key: "orderCandidate", value: ordreMatch[1], sourceEntryIndex: index });
+  } else {
+    var locationMatch = text.match(/\b([A-Z\u00c6\u00d8\u00c5]{1,3}\d{1,4})\b/);
+    if (locationMatch) facts.push({ key: "locationMentioned", value: locationMatch[1], sourceEntryIndex: index });
+  }
+
+  return facts;
+}
+
+function deriveFactsFromDayLog() {
+  if (!dayLog || !dayLog.entries) return [];
+  var facts = [];
+  for (var i = 0; i < dayLog.entries.length; i++) {
+    var entryFacts = extractFactsFromEntry(dayLog.entries[i], i);
+    for (var j = 0; j < entryFacts.length; j++) {
+      facts.push(entryFacts[j]);
+      emitTelemetry("FactCreated", { key: entryFacts[j].key });
+    }
+  }
+  return facts;
+}
+
+// ============================================================
+// OPERATIONAL COMPLETION ENGINE (Phase 6.5) \u2014 same closed-operator
+// evaluator as lib/rules/evaluate.mjs, ported (not duplicated as a
+// competing system: same operator set, same fail-closed default).
+// ============================================================
+function evaluateCompletionCondition(condition, context) {
+  var actual = context[condition.field];
+  switch (condition.operator) {
+    case "equals": return actual === condition.value;
+    case "notEquals": return actual !== condition.value;
+    case "in": return Array.isArray(condition.value) && condition.value.indexOf(actual) !== -1;
+    case "between": return typeof actual === "number" && actual >= condition.value[0] && actual <= condition.value[1];
+    case "gte": return typeof actual === "number" && actual >= condition.value;
+    case "lte": return typeof actual === "number" && actual <= condition.value;
+    case "exists": return actual !== undefined && actual !== null;
+    default: return false; // unknown operator: fail closed
+  }
+}
+
+function evaluateCompletionRule(rule, context) {
+  if (rule.conditions.length === 0) return true;
+  for (var i = 0; i < rule.conditions.length; i++) {
+    if (!evaluateCompletionCondition(rule.conditions[i], context)) return false;
+  }
+  return true;
+}
+
+function buildCompletionQueue(facts) {
+  var context = {};
+  for (var i = 0; i < facts.length; i++) context[facts[i].key] = facts[i].value;
+
+  var seenKeys = {};
+  var uniqueKeys = [];
+  for (var j = 0; j < facts.length; j++) {
+    if (!seenKeys[facts[j].key]) { seenKeys[facts[j].key] = true; uniqueKeys.push(facts[j].key); }
+  }
+
+  var byId = {};
+  var order = [];
+  for (var k = 0; k < uniqueKeys.length; k++) {
+    for (var r = 0; r < COMPLETION_RULES.length; r++) {
+      var rule = COMPLETION_RULES[r];
+      if (rule.trigger.event !== "factObserved" || rule.trigger.factKey !== uniqueKeys[k]) continue;
+      if (!evaluateCompletionRule(rule, context)) continue;
+      emitTelemetry("RuleTriggered", { ruleId: rule.id, factKey: uniqueKeys[k] });
+      var id = rule.action.type + ":" + rule.action.target;
+      if (!byId[id]) {
+        byId[id] = { id: id, kind: rule.action.type, target: rule.action.target, priority: rule.priority, triggeredByRuleIds: [rule.id], explanation: [{ ruleId: rule.id, factKey: uniqueKeys[k] }] };
+        order.push(id);
+      } else {
+        byId[id].priority = Math.max(byId[id].priority, rule.priority);
+        byId[id].triggeredByRuleIds.push(rule.id);
+        byId[id].explanation.push({ ruleId: rule.id, factKey: uniqueKeys[k] });
+      }
+    }
+  }
+
+  var queue = [];
+  for (var q = 0; q < order.length; q++) queue.push(byId[order[q]]);
+  queue.sort(function (a, b) { return b.priority - a.priority; });
+  return queue;
+}
+
+// Public, read-only: "what's missing before the workday is complete?"
+function getCompletionStatus() {
+  var facts = deriveFactsFromDayLog();
+  var missingActions = buildCompletionQueue(facts);
+  return { missingActions: missingActions, factsConsidered: facts.length, generatedAt: new Date().toISOString() };
 }
 
 // --- Schema mapping: dayLog -> filled schema ---
