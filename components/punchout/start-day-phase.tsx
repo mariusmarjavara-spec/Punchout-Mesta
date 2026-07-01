@@ -622,7 +622,7 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
           <button
             onClick={() => motor.closeSchemaEdit()}
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-secondary-foreground"
+            className="flex h-11 w-11 items-center justify-center rounded-lg bg-secondary text-secondary-foreground"
           >
             <X className="h-5 w-5" />
           </button>

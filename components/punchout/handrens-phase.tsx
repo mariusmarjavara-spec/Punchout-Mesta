@@ -182,7 +182,7 @@ function UnresolvedItemCard({
             <button
               onClick={() => motor.resolveItem(item.id, "confirm")}
               type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all active:scale-95"
+              className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all active:scale-95"
               aria-label="Bekreft"
             >
               <Check className="h-5 w-5" />
@@ -192,10 +192,10 @@ function UnresolvedItemCard({
             onClick={() => setExpanded(!expanded)}
             type="button"
             className={cn(
-              "flex h-10 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95",
+              "flex h-11 shrink-0 items-center justify-center rounded-lg transition-all active:scale-95",
               isRuh && !expanded
                 ? "bg-secondary px-3 text-sm font-medium text-secondary-foreground"
-                : "w-10 bg-secondary text-secondary-foreground"
+                : "w-11 bg-secondary text-secondary-foreground"
             )}
             aria-label={expanded ? "Skjul" : isRuh ? "Behandle" : "Mer"}
           >
