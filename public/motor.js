@@ -924,7 +924,16 @@ function resetCurrentDayOnly() {
 }
 
 function tryIgnoreError() {
-  // User wants to continue anyway
+  // User wants to continue anyway. The stored string is already known-
+  // corrupt (that's why storageError was set) and dayLog is already null/
+  // NOT_STARTED from the catch block, so there's nothing recoverable left
+  // in it — remove it, otherwise the next reload parses the same corrupt
+  // JSON and re-shows this exact blocking overlay.
+  try {
+    localStorage.removeItem(STORAGE_KEY_CURRENT);
+  } catch (e) {
+    console.error("Failed to clear corrupted current-day entry:", e);
+  }
   storageError = null;
   if (!REACT_MODE) {
     document.getElementById("storageErrorOverlay").classList.add("hidden");
