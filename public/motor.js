@@ -200,6 +200,14 @@ function loadUxState() {
       uxState.activeOverlay = parsed.activeOverlay || null;
       uxState.schemaId = parsed.schemaId || null;
       uxState.draftOrdre = parsed.draftOrdre || null;
+      // Rehydrate in-memory edit pointer: React renders SchemaEditOverlay
+      // straight from persisted uxState after a refresh, but never calls
+      // openSchemaEdit() again, so without this saveSchemaEdit() silently
+      // no-ops (editingSchemaId stays null) and the schema is stuck in
+      // "draft" forever with no visible error.
+      if (uxState.activeOverlay === "schema_edit" && uxState.schemaId) {
+        editingSchemaId = uxState.schemaId;
+      }
     }
   } catch (e) {
     console.error("Failed to load uxState:", e);
@@ -607,9 +615,13 @@ function endStaleDay() {
 function discardStaleDay() {
   // User wants to discard the old day
   if (REACT_MODE) {
-    // React UI handles confirmation dialog
+    // React UI handles confirmation dialog.
+    // Archive before wiping — "discard" should not mean permanent data
+    // loss for a day that may contain confirmed SJA/RUH entries.
+    pushToHistory(JSON.parse(JSON.stringify(dayLog)));
     dayLog = null;
     appState = "NOT_STARTED";
+    clearUxState();
     saveCurrentDay();
     emitAllStateChanges();
     return;
@@ -617,8 +629,10 @@ function discardStaleDay() {
   if (!REACT_MODE) {
     if (confirm("Er du sikker på at du vil forkaste dagen fra " + formatDate(dayLog.date) + "? All data vil gå tapt.")) {
       hideStaleDayBanner();
+      pushToHistory(JSON.parse(JSON.stringify(dayLog)));
       dayLog = null;
       appState = "NOT_STARTED";
+      clearUxState();
       saveCurrentDay();
       render();
     }
