@@ -113,7 +113,7 @@ export function HandrensPhase() {
       </main>
 
       {/* Bottom bar — Lock button */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 px-4 py-4 backdrop-blur-sm">
+      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 px-4 pt-4 backdrop-blur-sm [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
         {readyToLock && allResolved ? (
           <LockDayButton motor={motor} />
         ) : (

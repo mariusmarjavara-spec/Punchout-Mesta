@@ -753,7 +753,7 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
       </main>
 
       {/* Actions */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 px-4 py-4 backdrop-blur-sm space-y-2">
+      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 px-4 pt-4 backdrop-blur-sm space-y-2 [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
         {schemaError && (
           <p className="text-sm text-destructive text-center pb-1">{schemaError}</p>
         )}
