@@ -1,0 +1,12 @@
+[
+  {
+    "scenario": "Vessel name mentioned in speech does not textually match the order id covering it",
+    "category": "order",
+    "originalValue": "MSC Bergen",
+    "knownValues": ["NHT-2026-0451", "NHT-2026-0452", "NHT-2026-0398"],
+    "correctionRepeats": 6,
+    "correctedValue": "NHT-2026-0451",
+    "expectedTopBeforeCorrection": "NHT-2026-0452",
+    "expectedTopAfterCorrection": "NHT-2026-0451"
+  }
+]

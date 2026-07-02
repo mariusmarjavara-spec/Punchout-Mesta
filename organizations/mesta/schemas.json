@@ -1,0 +1,41 @@
+[
+  {
+    "schemaType": "sja_preday",
+    "version": 3,
+    "effectiveFrom": "2026-07-01",
+    "title": "SJA (før arbeid)",
+    "fields": {
+      "oppgave": { "label": "Oppgave", "type": "text", "required": true },
+      "sted": { "label": "Sted", "type": "text", "required": false },
+      "risiko": { "label": "Risiko", "type": "text", "required": false },
+      "konsekvens": { "label": "Konsekvens", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false },
+      "arbeidsvarsling": { "label": "Arbeidsvarsling", "type": "enum", "required": false, "options": ["ingen", "enkel", "manuell", "full"] },
+      "godkjent": { "label": "Godkjent", "type": "boolean", "required": true, "autofillable": false }
+    },
+    "metadata": { "publishedBy": "landax", "sourceSchemaId": "landax_sja_v7" }
+  },
+  {
+    "schemaType": "ruh",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "title": "RUH-rapport",
+    "fields": {
+      "tidspunkt": { "label": "Tidspunkt", "type": "text", "required": false },
+      "beskrivelse": { "label": "Beskrivelse", "type": "text", "required": false },
+      "arsak": { "label": "Årsak", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false }
+    }
+  },
+  {
+    "schemaType": "maskinsjekk",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "title": "Maskinsjekk",
+    "fields": {
+      "maskin": { "label": "Maskin", "type": "text", "required": true },
+      "lys_ok": { "label": "Lys OK", "type": "boolean", "required": true },
+      "bremser_ok": { "label": "Bremser OK", "type": "boolean", "required": true }
+    }
+  }
+]

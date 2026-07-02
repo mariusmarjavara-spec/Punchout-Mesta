@@ -1,0 +1,25 @@
+[
+  {
+    "schemaType": "kranoperatorsjekk",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "title": "Kranoperatørsjekk",
+    "fields": {
+      "operator": { "label": "Operatør", "type": "text", "required": true },
+      "kran": { "label": "Kran", "type": "text", "required": true },
+      "wire_ok": { "label": "Wire OK", "type": "boolean", "required": true },
+      "bremser_ok": { "label": "Bremser OK", "type": "boolean", "required": true }
+    }
+  },
+  {
+    "schemaType": "avvik",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "title": "Avviksrapport",
+    "fields": {
+      "beskrivelse": { "label": "Beskrivelse", "type": "text", "required": false },
+      "arsak": { "label": "Årsak", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false }
+    }
+  }
+]

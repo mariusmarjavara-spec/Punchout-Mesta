@@ -1,0 +1,14 @@
+{
+  "activities": [
+    { "id": "lasting", "label": "Lasting", "machineTypes": ["mobilkran", "terminaltraktor"], "keywords": ["lastet", "laster", "lasting"] },
+    { "id": "lossing", "label": "Lossing", "machineTypes": ["reachstacker", "mobilkran"], "keywords": ["losset", "losser", "lossing"] }
+  ],
+  "machineTypes": [
+    { "id": "reachstacker", "label": "Reachstacker RS-12", "requiredSchemas": ["kranoperatorsjekk"], "recommendedSchemas": [], "externalSystems": ["portlink"] },
+    { "id": "mobilkran", "label": "Mobilkran Liebherr LTM", "requiredSchemas": ["kranoperatorsjekk"], "recommendedSchemas": [], "externalSystems": ["portlink"] },
+    { "id": "terminaltraktor", "label": "Terminaltraktor TT-4", "requiredSchemas": [], "recommendedSchemas": [], "externalSystems": ["portlink"] }
+  ],
+  "orderTypes": [
+    { "id": "containerhandtering", "label": "Containerhåndtering", "activities": ["lasting", "lossing"] }
+  ]
+}

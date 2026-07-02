@@ -1,0 +1,15 @@
+{
+  "activities": [
+    { "id": "feiing", "label": "Feiing", "machineTypes": ["wille"], "keywords": ["feid", "feier", "feiing"] },
+    { "id": "brøyting", "label": "Brøyting", "machineTypes": ["hjullaster"], "keywords": ["brøytet", "brøyter", "brøyting"] },
+    { "id": "grøfterensk", "label": "Grøfterensk", "machineTypes": ["gravemaskin"], "keywords": ["grøft", "grøfterensk"] }
+  ],
+  "machineTypes": [
+    { "id": "wille", "label": "Wille 675", "requiredSchemas": ["maskinsjekk"], "recommendedSchemas": [], "externalSystems": ["landax"] },
+    { "id": "hjullaster", "label": "Hjullaster 12t", "requiredSchemas": ["maskinsjekk"], "recommendedSchemas": [], "externalSystems": ["landax"] },
+    { "id": "gravemaskin", "label": "Gravemaskin 8t", "requiredSchemas": ["maskinsjekk", "sja_preday"], "recommendedSchemas": [], "externalSystems": ["landax"] }
+  ],
+  "orderTypes": [
+    { "id": "veidrift", "label": "Veidrift", "activities": ["feiing", "brøyting", "grøfterensk"] }
+  ]
+}

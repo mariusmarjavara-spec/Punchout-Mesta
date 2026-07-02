@@ -1,0 +1,76 @@
+{
+  "organizationId": "nordhavn",
+  "name": "Nordhavn Terminal AS",
+  "orders": [
+    { "id": "NHT-2026-0451", "description": "MSC Bergen - containerlossing kai 4", "active": true },
+    { "id": "NHT-2026-0452", "description": "Fjordline - RoRo lasting kai 2", "active": true },
+    { "id": "NHT-2026-0398", "description": "Tomcontainer retur kai 1", "active": false }
+  ],
+  "machines": [
+    { "id": "m1", "type": "reachstacker", "label": "Reachstacker RS-12" },
+    { "id": "m2", "type": "mobilkran", "label": "Mobilkran Liebherr LTM" },
+    { "id": "m3", "type": "terminaltraktor", "label": "Terminaltraktor TT-4" }
+  ],
+  "vehicles": [],
+  "wageCodes": [
+    { "kode": "T100", "label": "Ordinær terminaltid" },
+    { "kode": "T200", "label": "Skifttillegg" }
+  ],
+  "procedures": [],
+  "externalLinks": [
+    { "id": "portlink", "title": "Logg inn i PortLink", "url": "https://portlink.example.no/login" }
+  ],
+  "sjaDefaults": null,
+  "rules": [
+    {
+      "id": "rule_avvik_on_incident",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "incidentReported" },
+      "conditions": [{ "field": "incidentReported", "operator": "equals", "value": true }],
+      "action": { "type": "requireSchema", "target": "avvik" },
+      "priority": 100,
+      "affects": { "schemaTypes": ["avvik"] }
+    },
+    {
+      "id": "rule_required_schema_from_machine",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "requiredSchemaFromMachine" },
+      "conditions": [],
+      "action": { "type": "requireSchema", "target": "$factValue" },
+      "priority": 80,
+      "affects": {}
+    }
+  ],
+  "capabilityProviders": [
+    { "id": "internal_schema_registry", "kind": "schema" },
+    { "id": "portlink", "kind": "adapter" }
+  ],
+  "capabilityBindings": [
+    { "capability": "kranoperatorsjekk", "providerId": "internal_schema_registry", "config": { "schemaType": "kranoperatorsjekk" } },
+    { "capability": "avvik", "providerId": "internal_schema_registry", "config": { "schemaType": "avvik" } }
+  ],
+  "rankingWeights": {
+    "maxAliasBonus": 12,
+    "maxOrganizationBonus": 5,
+    "maxRecencyBonus": 4,
+    "recencyPerOccurrence": 2,
+    "correctionBonusThresholds": [
+      { "minCount": 1, "bonus": 3 },
+      { "minCount": 3, "bonus": 8 },
+      { "minCount": 6, "bonus": 15 },
+      { "minCount": 12, "bonus": 20 }
+    ]
+  },
+  "capabilityKindExpectations": {
+    "kranoperatorsjekk": "schema",
+    "avvik": "schema"
+  },
+  "extractionPatterns": {
+    "ordre": "\\b(NHT-\\d{4}-\\d{3,4})\\b"
+  },
+  "extractionVocabularies": {
+    "incidentKeywords": ["avvik", "hendelse", "skade"]
+  }
+}

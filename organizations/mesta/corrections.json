@@ -1,0 +1,12 @@
+[
+  {
+    "scenario": "Riksvei 92 location text does not textually match its covering order number",
+    "category": "order",
+    "originalValue": "RV92",
+    "knownValues": ["204481-0014", "204481-0149", "204481-0022"],
+    "correctionRepeats": 3,
+    "correctedValue": "204481-0149",
+    "expectedTopBeforeCorrection": "204481-0014",
+    "expectedTopAfterCorrection": "204481-0149"
+  }
+]

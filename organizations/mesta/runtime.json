@@ -1,0 +1,74 @@
+{
+  "organizationId": "mesta",
+  "name": "Mesta",
+  "orders": [
+    { "id": "204481-0014", "description": "Fv. 17 asfalt/brøyting", "active": true },
+    { "id": "204481-0149", "description": "Rv. 92 drift og vedlikehold", "active": true },
+    { "id": "204481-0022", "description": "Fv. 22 grøfterensk", "active": false }
+  ],
+  "machines": [
+    { "id": "m1", "type": "hjullaster", "label": "Hjullaster 12t" },
+    { "id": "m2", "type": "gravemaskin", "label": "Gravemaskin 8t" },
+    { "id": "m3", "type": "wille", "label": "Wille 675" }
+  ],
+  "vehicles": [
+    { "regNr": "AB 12345" },
+    { "regNr": "CD 67890" },
+    { "regNr": "EF 11111" }
+  ],
+  "wageCodes": [
+    { "kode": "100", "label": "Ordinær arbeidstid" },
+    { "kode": "200", "label": "Overtid 50%" },
+    { "kode": "300", "label": "Overtid 100%" }
+  ],
+  "procedures": [],
+  "externalLinks": [
+    { "id": "elrapp", "title": "Logg inn i Elrapp", "url": "https://elrapp.atlas.vegvesen.no/login" },
+    { "id": "linx", "title": "Linx-innlogging", "url": "https://linx.no" }
+  ],
+  "sjaDefaults": { "sted": "", "arbeidsvarsling": "enkel" },
+  "rules": [
+    {
+      "id": "rule_ruh_on_incident",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "incidentReported" },
+      "conditions": [{ "field": "incidentReported", "operator": "equals", "value": true }],
+      "action": { "type": "requireSchema", "target": "ruh" },
+      "priority": 100,
+      "affects": { "schemaTypes": ["ruh"] }
+    },
+    {
+      "id": "rule_required_schema_from_machine",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "requiredSchemaFromMachine" },
+      "conditions": [],
+      "action": { "type": "requireSchema", "target": "$factValue" },
+      "priority": 80,
+      "affects": {}
+    }
+  ],
+  "capabilityProviders": [
+    { "id": "internal_schema_registry", "kind": "schema" },
+    { "id": "landax", "kind": "adapter" }
+  ],
+  "capabilityBindings": [
+    { "capability": "sja", "providerId": "internal_schema_registry", "config": { "schemaType": "sja_preday" } },
+    { "capability": "ruh", "providerId": "internal_schema_registry", "config": { "schemaType": "ruh" } }
+  ],
+  "rankingWeights": {
+    "maxAliasBonus": 15,
+    "maxOrganizationBonus": 5,
+    "maxRecencyBonus": 5,
+    "recencyPerOccurrence": 2,
+    "correctionBonusThresholds": [
+      { "minCount": 1, "bonus": 2 },
+      { "minCount": 3, "bonus": 6 },
+      { "minCount": 5, "bonus": 10 },
+      { "minCount": 10, "bonus": 15 },
+      { "minCount": 20, "bonus": 20 }
+    ]
+  },
+  "capabilityKindExpectations": {}
+}
