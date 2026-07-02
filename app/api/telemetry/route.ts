@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
-import { telemetryLog } from "@/lib/backend/state.mjs";
+import { telemetryLog, recordTelemetry } from "@/lib/backend/state.mjs";
 
 /**
- * Del 5: receives whatever telemetry the caller hands it — motor.js
- * itself has no "flush to backend" function yet (that would be new
- * motor functionality, explicitly out of scope this phase); this
- * endpoint's job is only to prove the RECEIVING side works. Accepts an
- * array of TelemetryEvent (lib/telemetry/types.mjs shape).
+ * Del 5 (Phase 11) / Del 3 (Phase A): receives telemetry batches.
+ * motor.js now auto-flushes unflushed events on an interval, batched,
+ * with per-event ids for idempotency — recordTelemetry() dedupes by
+ * id, so a batch resent after a lost response (client never saw the
+ * 2xx) is safely a no-op on the events already stored, and the
+ * response is persisted immediately (Phase A Del 2).
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const events = Array.isArray(body) ? body : body?.events;
   if (!Array.isArray(events)) return NextResponse.json({ error: "expected an array of telemetry events (or {events:[...]})" }, { status: 400 });
 
-  for (const e of events) telemetryLog.push(e);
-  return NextResponse.json({ received: events.length, totalStored: telemetryLog.length }, { status: 201 });
+  const stored = recordTelemetry(events);
+  return NextResponse.json({ received: events.length, storedNew: stored, totalStored: telemetryLog.length }, { status: 201 });
 }
 
 export async function GET(req: NextRequest) {

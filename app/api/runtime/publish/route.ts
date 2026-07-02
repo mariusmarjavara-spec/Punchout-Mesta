@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { compileFromPackage, publish } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { runFullDayScenario } from "@/lib/regression/full-day-scenario.mjs";
+// @ts-ignore
+import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
 
 /**
  * Del 2 steps: Approve -> Publish -> Sign -> Deploy, as one call for MVP
@@ -15,8 +17,15 @@ import { runFullDayScenario } from "@/lib/regression/full-day-scenario.mjs";
  * calling this endpoint. Signing happens inside RuntimeStore.publish()
  * (existing Phase 6 mechanism, reused unchanged). "Deploy" = the
  * manifest becomes immediately visible to GET /api/runtime/active.
+ *
+ * Phase A Del 1/5: admin-gated — checked before `approved`, so an
+ * unauthenticated caller can never reach the approve/compile/dry-run
+ * stages at all, not just the final publish.
  */
 export async function POST(req: NextRequest) {
+  const auth = verifyAdminAuth(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
+
   const body = await req.json().catch(() => ({}));
   const { organizationSlug, publishedBy, approved } = body;
   if (!organizationSlug) return NextResponse.json({ error: "organizationSlug required" }, { status: 400 });

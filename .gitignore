@@ -19,6 +19,9 @@ yarn-error.log*
 # env files
 .env*
 
+# backend persistence (Phase A Del 2) — local/pilot runtime data, never committed
+/.data/
+
 # vercel
 .vercel
 

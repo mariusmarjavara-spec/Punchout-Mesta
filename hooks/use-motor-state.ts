@@ -150,10 +150,12 @@ export interface CompletionStatus {
 }
 
 export interface TelemetryEvent {
+  id?: string;
   type: string;
   occurredAt: string;
   organizationId: string;
   data: Record<string, unknown>;
+  flushed?: boolean;
 }
 
 export interface RuntimeConfig {

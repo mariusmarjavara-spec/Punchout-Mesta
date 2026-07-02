@@ -112,7 +112,10 @@ var ADMIN_CONFIG = {
   // Export configuration (edge → customer endpoint)
   userId: null,              // string — identifies the worker, default "anonymous"
   exportEndpoint: null,      // URL — null = export disabled
-  exportHmacSecret: null     // string — null = no HMAC signature
+  exportHmacSecret: null,    // string — null = no HMAC signature
+
+  // Telemetry configuration (Phase A Del 3) — edge → backend, mirrors export config
+  telemetryEndpoint: null    // URL — null = telemetry auto-flush disabled
 };
 
 // ============================================================
@@ -638,6 +641,7 @@ function init() {
     emitStateChange('dayLog');
     emitStateChange('uxState');
     initExportSync();
+    initTelemetrySync();
     return;
   }
 
@@ -663,6 +667,7 @@ function init() {
   restoreOverlayState();
 
   initExportSync();
+  initTelemetrySync();
 }
 
 // --- Stale Day Detection ---
@@ -5616,10 +5621,14 @@ function emitTelemetry(type, data) {
   try {
     var log = loadTelemetry();
     log.push({
+      id: (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : "tel_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
       type: type,
       occurredAt: new Date().toISOString(),
       organizationId: ADMIN_CONFIG.userId ? ADMIN_CONFIG.hovedordre : "unknown",
-      data: data || {}
+      data: data || {},
+      flushed: false
     });
     if (log.length > TELEMETRY_CAP) log = log.slice(log.length - TELEMETRY_CAP);
     localStorage.setItem(STORAGE_KEY_TELEMETRY, JSON.stringify(log));
@@ -5631,6 +5640,63 @@ function emitTelemetry(type, data) {
 
 function getTelemetryLog() {
   return loadTelemetry();
+}
+
+// ============================================================
+// TELEMETRY SYNC (Phase A Del 3) \u2014 auto-flush, mirrors the export
+// outbox pattern exactly: batched, retried via the same interval,
+// idempotent (per-event id, backend dedupes), never blocks the user
+// (fire-and-forget fetch). Does NOT affect motor determinism \u2014 same
+// side-channel posture as syncExports(). Before this, telemetry only
+// ever left the device if something external manually called
+// getTelemetryLog() and POSTed it; this makes that automatic.
+// ============================================================
+var TELEMETRY_BATCH_SIZE = 100;
+var telemetrySyncIntervalId = null;
+
+function markTelemetryFlushed(ids) {
+  try {
+    var log = loadTelemetry();
+    var idSet = {};
+    for (var i = 0; i < ids.length; i++) idSet[ids[i]] = true;
+    for (var j = 0; j < log.length; j++) {
+      if (idSet[log[j].id]) log[j].flushed = true;
+    }
+    localStorage.setItem(STORAGE_KEY_TELEMETRY, JSON.stringify(log));
+  } catch (e) {
+    console.error("Failed to mark telemetry flushed:", e);
+  }
+}
+
+function flushTelemetry() {
+  var endpoint = ADMIN_CONFIG.telemetryEndpoint;
+  if (!endpoint) return;
+
+  var log = loadTelemetry();
+  var unflushed = log.filter(function (e) { return !e.flushed; }).slice(0, TELEMETRY_BATCH_SIZE);
+  if (unflushed.length === 0) return;
+
+  var ids = unflushed.map(function (e) { return e.id; });
+  fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Punchout-Device": getOrCreateDeviceId() },
+    body: JSON.stringify(unflushed)
+  }).then(function (response) {
+    if (response.ok || response.status === 409) {
+      markTelemetryFlushed(ids);
+    }
+    // non-2xx/409: leave unflushed \u2014 next interval retries the same batch, no data is lost or duplicated client-side
+  }).catch(function () {
+    // network error \u2014 leave unflushed, next interval retries automatically
+  });
+}
+
+function initTelemetrySync() {
+  flushTelemetry();
+  telemetrySyncIntervalId = setInterval(flushTelemetry, 45000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") flushTelemetry();
+  });
 }
 
 // ============================================================

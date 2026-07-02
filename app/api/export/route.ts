@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
-import { exportLog, DEVICE_SECRETS } from "@/lib/backend/state.mjs";
+import { exportLog, recordExport, getDeviceSecret, isDeviceRegistered } from "@/lib/backend/state.mjs";
 
 /**
  * Del 4: the real export endpoint. Verifies the EXACT HMAC scheme
@@ -10,15 +10,21 @@ import { exportLog, DEVICE_SECRETS } from "@/lib/backend/state.mjs";
  * "Identity" reduced to its honest scope: verifying which device sent
  * an export, not a login system.
  *
+ * Phase A Del 1/6 hardening: an unregistered device is now REJECTED
+ * (401), never accepted as "received but unverified" — closes the gap
+ * where any caller could push export data under an arbitrary,
+ * never-provisioned device id. Devices must go through
+ * POST /api/devices/register (admin-gated) first.
+ *
  * Response codes deliberately match what motor.js's syncExports()
  * already knows how to interpret (read directly from motor.js, not
  * assumed): 2xx or 409 = sent; 4xx (not 409) = failed, no retry; 5xx =
  * failed, retry with backoff. Idempotent on exportId — a duplicate
  * POST returns 409, motor.js already treats that as success.
  */
-async function verifySignature(deviceId: string, rawBody: string, signatureHeader: string | null): Promise<boolean | null> {
-  const secret = DEVICE_SECRETS[deviceId as keyof typeof DEVICE_SECRETS];
-  if (!secret) return null; // unknown device — caller decides how to treat "null"
+async function verifySignature(deviceId: string, rawBody: string, signatureHeader: string | null): Promise<boolean> {
+  const secret = getDeviceSecret(deviceId);
+  if (!secret) return false; // unreachable in practice — caller checks isDeviceRegistered first, kept as a defensive fallback
   if (!signatureHeader) return false;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -45,21 +51,27 @@ export async function POST(req: NextRequest) {
   }
 
   // Idempotent retry: same exportId already logged -> 409, which
-  // motor.js's syncExports() already treats as success.
+  // motor.js's syncExports() already treats as success. Checked before
+  // identity so a duplicate retry from an already-accepted device never
+  // fails for an unrelated reason.
   const existing = exportLog.find((e: any) => e.exportId === exportId);
   if (existing) {
     return NextResponse.json({ receiptId: "receipt_" + exportId, status: "duplicate" }, { status: 409 });
   }
 
+  if (!isDeviceRegistered(deviceId)) {
+    recordExport({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid: false, rejectedReason: "unregistered_device" });
+    return NextResponse.json({ error: "unknown device — register it via /api/devices/register before exporting" }, { status: 401 });
+  }
+
   const signatureValid = await verifySignature(deviceId, rawBody, signatureHeader);
-  // Known device, signature required but wrong/missing -> reject (4xx, no retry — correct: retrying won't fix a bad signature).
-  if (signatureValid === false) {
-    exportLog.push({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid: false });
+  if (!signatureValid) {
+    recordExport({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid: false });
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  exportLog.push({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid });
-  return NextResponse.json({ receiptId: "receipt_" + exportId, status: "received", signatureVerified: signatureValid === true }, { status: 201 });
+  recordExport({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid: true });
+  return NextResponse.json({ receiptId: "receipt_" + exportId, status: "received", signatureVerified: true }, { status: 201 });
 }
 
 export async function GET() {
