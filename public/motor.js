@@ -147,6 +147,19 @@ var NORMALIZED_CONFIG = normalizeConfig(RUNTIME_CONFIG);
 ADMIN_CONFIG.lonnskoder = NORMALIZED_CONFIG.lonnskoder;
 ADMIN_CONFIG.hoofdordre = NORMALIZED_CONFIG.hoofdordre;
 
+// ============================================================
+// RUNTIME INJECTION (Phase 9) — optional. window.PUNCHOUT_RUNTIME,
+// loaded by a script tag BEFORE motor.js (same pattern as
+// window.PUNCHOUT_CONFIG), is a compiled OrganizationRuntime
+// (lib/runtime/types.mjs) produced by compileRuntime(). If present, its
+// schemas/rules override the hardcoded Mesta defaults below. If absent,
+// every hardcoded default stays exactly as it was — this is additive,
+// the live Mesta pilot is unaffected either way. Applied further down,
+// after PRE_DAY_SCHEMAS/RUNNING_SCHEMAS/DRIFT_SCHEMAS/CONVERSION_SCHEMAS
+// are defined, since it overrides entries in those objects.
+// ============================================================
+var INJECTED_RUNTIME = (typeof window !== 'undefined' && window.PUNCHOUT_RUNTIME) ? window.PUNCHOUT_RUNTIME : null;
+
 // --- State ---
 // Only one active day at a time. null = no active day.
 var appState = "NOT_STARTED"; // NOT_STARTED | ACTIVE | FINISHED | LOCKED
@@ -423,6 +436,45 @@ var CONVERSION_SCHEMAS = {
 };
 
 // ============================================================
+// APPLY RUNTIME INJECTION (Phase 9) — overrides schema/rule defaults
+// declared above with organization-supplied ones from INJECTED_RUNTIME.
+// A schema type not present in the injected Runtime keeps its Mesta
+// default (merge, not replace-all) — only COMPLETION_RULES is a full
+// replace, since a Runtime's rule set is meant to be complete for that
+// organization, not additive to Mesta's.
+// ============================================================
+if (INJECTED_RUNTIME && Array.isArray(INJECTED_RUNTIME.schemas)) {
+  for (var _si = 0; _si < INJECTED_RUNTIME.schemas.length; _si++) {
+    var _s = INJECTED_RUNTIME.schemas[_si];
+    var _bucket = _s.origin === "pre_day" ? PRE_DAY_SCHEMAS
+      : _s.origin === "drift" ? DRIFT_SCHEMAS
+      : _s.origin === "conversion" ? CONVERSION_SCHEMAS
+      : RUNNING_SCHEMAS;
+    var _mappedFields = {};
+    var _fieldKeys = Object.keys(_s.fields);
+    for (var _fi = 0; _fi < _fieldKeys.length; _fi++) {
+      var _fk = _fieldKeys[_fi];
+      var _fdef = _s.fields[_fk];
+      _mappedFields[_fk] = {
+        label: _fdef.label,
+        type: _fdef.type === "text" ? "string" : _fdef.type,
+        required: !!_fdef.required,
+        options: _fdef.options
+      };
+    }
+    _bucket[_s.schemaType] = {
+      id: _s.schemaType + "_v" + _s.version,
+      label: _s.title || _s.schemaType,
+      triggers: _s.triggers || [],
+      fields: _mappedFields
+    };
+  }
+}
+if (INJECTED_RUNTIME && Array.isArray(INJECTED_RUNTIME.rules)) {
+  COMPLETION_RULES = INJECTED_RUNTIME.rules;
+}
+
+// ============================================================
 // MOTOR BRIDGE (for React UI integration)
 // ============================================================
 
@@ -487,6 +539,7 @@ window.Motor = {
   openSchemaEdit: openSchemaEdit,
   closeSchemaEdit: closeSchemaEdit,
   saveSchemaEdit: saveSchemaEdit,
+  setSchemaField: setSchemaField,
 
   // Draft operations
   openDraftEdit: openDraftEdit,
@@ -518,6 +571,9 @@ window.Motor = {
   // Operational Completion Engine + Telemetry (Phase 6.5, read-only)
   getCompletionStatus: getCompletionStatus,
   getTelemetryLog: getTelemetryLog,
+
+  // Generic Schema Renderer support (Phase 9, read-only)
+  getSchemaFieldDefinitions: getSchemaFieldDefinitions,
 
   // Pre-day
   showPreDayOverlay: showPreDayOverlay,
@@ -2425,6 +2481,17 @@ function getSchemaDefinition(schema) {
   } else {
     return RUNNING_SCHEMAS[schema.type];
   }
+}
+
+// Public, read-only: what the Generic Schema Renderer (React) actually
+// draws from. Phase 9 — previously React had its own hardcoded copy of
+// this exact information (SCHEMA_LABELS/REQUIRED_FIELDS/ENUM_OPTIONS in
+// start-day-phase.tsx). Same lookup as getSchemaDefinition() (by type +
+// origin), exposed on window.Motor so React never needs its own copy.
+function getSchemaFieldDefinitions(schemaType, origin) {
+  var def = getSchemaDefinition({ type: schemaType, origin: origin });
+  if (!def) return null;
+  return { label: def.label, fields: def.fields };
 }
 
 function openSchemaEdit(schemaId) {
@@ -4706,14 +4773,24 @@ function resolveSchemaItem(schemaId, action) {
   if (!schema) return;
 
   if (action === "confirm") {
-    // RUH: arsak and tiltak must be filled before confirmation.
-    // Motor is last defense — UI should also validate, but motor never allows empty RUH.
-    if (schema.type === "ruh") {
-      var ruhMissing = [];
-      if (!schema.fields.arsak || schema.fields.arsak === "") ruhMissing.push("årsak");
-      if (!schema.fields.tiltak || schema.fields.tiltak === "") ruhMissing.push("tiltak");
-      if (ruhMissing.length > 0) {
-        schemaError = "RUH krever " + ruhMissing.join(" og ");
+    // Generic required-field check, for ANY schema type — motor is last
+    // defense — UI should also validate, but motor never allows an empty
+    // required field through. Phase 9: previously this only checked RUH's
+    // arsak/tiltak by hardcoded field name; now reads the schema's own
+    // definition (getSchemaDefinition), so any organization's schema gets
+    // the same protection without motor knowing its field names in advance.
+    var def = getSchemaDefinition(schema);
+    if (def && def.fields) {
+      var missingLabels = [];
+      var reqKeys = Object.keys(def.fields);
+      for (var ri = 0; ri < reqKeys.length; ri++) {
+        var rk = reqKeys[ri];
+        if (!def.fields[rk].required) continue;
+        var rv = schema.fields[rk];
+        if (rv === undefined || rv === null || rv === "") missingLabels.push(def.fields[rk].label);
+      }
+      if (missingLabels.length > 0) {
+        schemaError = (def.label || schema.type) + " krever: " + missingLabels.join(", ");
         if (schemaErrorTimer) clearTimeout(schemaErrorTimer);
         schemaErrorTimer = setTimeout(function() {
           schemaError = null;
@@ -5553,8 +5630,16 @@ function getTelemetryLog() {
 // ONLY these Facts, never dayLog.entries[i].text directly.
 // ============================================================
 var COMPLETION_NUMBER_WORDS = { en: 1, ett: 1, to: 2, tre: 3, fire: 4, fem: 5, seks: 6, sju: 7, syv: 7, atte: 8, \u00e5tte: 8, ni: 9, ti: 10, elleve: 11, tolv: 12 };
-var COMPLETION_INCIDENT_KEYWORDS = ["nestenulykke", "ulykke", "skade", "uhell"];
-var COMPLETION_FUEL_KEYWORDS = ["diesel", "drivstoff"];
+// Phase 9 audit finding: these were still hardcoded to Mesta's
+// vocabulary/ID-format despite Phase 8 already fixing the same problem
+// in lib/engine/facts.mjs \u2014 the lib/ twin was fixed, this native port
+// was missed. Now overridable via INJECTED_RUNTIME.extractionVocabularies
+// / .extractionPatterns, same contract shape as the lib/ side, defaults
+// preserved for the live Mesta pilot.
+var COMPLETION_INCIDENT_KEYWORDS = (INJECTED_RUNTIME && INJECTED_RUNTIME.extractionVocabularies && INJECTED_RUNTIME.extractionVocabularies.incidentKeywords) || ["nestenulykke", "ulykke", "skade", "uhell"];
+var COMPLETION_FUEL_KEYWORDS = (INJECTED_RUNTIME && INJECTED_RUNTIME.extractionVocabularies && INJECTED_RUNTIME.extractionVocabularies.fuelKeywords) || ["diesel", "drivstoff"];
+var COMPLETION_ORDRE_PATTERN = new RegExp((INJECTED_RUNTIME && INJECTED_RUNTIME.extractionPatterns && INJECTED_RUNTIME.extractionPatterns.ordre) || "\\b(\\d{4,}-\\d{1,4})\\b");
+var COMPLETION_LOCATION_PATTERN = new RegExp((INJECTED_RUNTIME && INJECTED_RUNTIME.extractionPatterns && INJECTED_RUNTIME.extractionPatterns.location) || "\\b([A-Z\u00c6\u00d8\u00c5]{1,3}\\d{1,4})\\b");
 
 function extractHoursFromText(text) {
   var digitMatch = text.match(/(\d+(?:[.,]\d+)?)\s*timer?/i);
@@ -5594,11 +5679,11 @@ function extractFactsFromEntry(entry, index) {
     }
   }
 
-  var ordreMatch = text.match(/\b(\d{4,}-\d{1,4})\b/);
+  var ordreMatch = text.match(COMPLETION_ORDRE_PATTERN);
   if (ordreMatch) {
     facts.push({ key: "orderCandidate", value: ordreMatch[1], sourceEntryIndex: index });
   } else {
-    var locationMatch = text.match(/\b([A-Z\u00c6\u00d8\u00c5]{1,3}\d{1,4})\b/);
+    var locationMatch = text.match(COMPLETION_LOCATION_PATTERN);
     if (locationMatch) facts.push({ key: "locationMentioned", value: locationMatch[1], sourceEntryIndex: index });
   }
 

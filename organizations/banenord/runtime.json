@@ -1,0 +1,74 @@
+{
+  "organizationId": "banenord",
+  "name": "Baneservice Nord AS",
+  "orders": [
+    { "id": "BS-2026-T045", "description": "Sporrensk strekning Hell-Værnes", "active": true },
+    { "id": "BS-2026-T046", "description": "Skinnebytte km 12-14", "active": true }
+  ],
+  "machines": [
+    { "id": "m1", "type": "sporgaende_arbeidsmaskin", "label": "Sporgående arbeidsmaskin SGA-2" },
+    { "id": "m2", "type": "skinneslip", "label": "Skinneslipemaskin SS-9" }
+  ],
+  "vehicles": [],
+  "wageCodes": [
+    { "kode": "B100", "label": "Ordinær banetid" },
+    { "kode": "B200", "label": "Nattarbeidstillegg" }
+  ],
+  "procedures": [],
+  "externalLinks": [
+    { "id": "banenis", "title": "Logg inn i BaneNIS", "url": "https://banenis.example.no/login" }
+  ],
+  "sjaDefaults": null,
+  "rules": [
+    {
+      "id": "rule_sikkerhetsavvik_on_incident",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "incidentReported" },
+      "conditions": [{ "field": "incidentReported", "operator": "equals", "value": true }],
+      "action": { "type": "requireSchema", "target": "sikkerhetsavvik" },
+      "priority": 100,
+      "affects": { "schemaTypes": ["sikkerhetsavvik"] }
+    },
+    {
+      "id": "rule_required_schema_from_machine",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "requiredSchemaFromMachine" },
+      "conditions": [],
+      "action": { "type": "requireSchema", "target": "$factValue" },
+      "priority": 80,
+      "affects": {}
+    }
+  ],
+  "capabilityProviders": [
+    { "id": "internal_schema_registry", "kind": "schema" },
+    { "id": "banenis", "kind": "adapter" }
+  ],
+  "capabilityBindings": [
+    { "capability": "sporarbeidstillatelse", "providerId": "internal_schema_registry", "config": { "schemaType": "sporarbeidstillatelse" } },
+    { "capability": "sikkerhetsavvik", "providerId": "internal_schema_registry", "config": { "schemaType": "sikkerhetsavvik" } }
+  ],
+  "rankingWeights": {
+    "maxAliasBonus": 15,
+    "maxOrganizationBonus": 5,
+    "maxRecencyBonus": 5,
+    "recencyPerOccurrence": 2,
+    "correctionBonusThresholds": [
+      { "minCount": 1, "bonus": 4 },
+      { "minCount": 2, "bonus": 9 },
+      { "minCount": 4, "bonus": 15 },
+      { "minCount": 8, "bonus": 20 }
+    ]
+  },
+  "capabilityKindExpectations": {
+    "sporarbeidstillatelse": "schema",
+    "sikkerhetsavvik": "schema"
+  },
+  "extractionPatterns": {
+    "ordre": "\\b(BS-\\d{4}-T\\d{2,4})\\b"
+  },
+  "extractionVocabularies": {
+    "incidentKeywords": ["sikkerhetsavvik", "nestenulykke", "faresituasjon"]
+  }
+}

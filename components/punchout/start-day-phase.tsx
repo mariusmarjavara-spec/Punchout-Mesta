@@ -304,11 +304,13 @@ export function StartDayPhase() {
 
   // --- Review state OR ACTIVE (pre): Show pre-day suggestions ---
   if (startUIState === 'review' || isPreDay) {
-    // Helper for schema labels
+    // Helper for schema labels. The two NO/EN-translated short labels are a
+    // UI-language concern (kept); any other schema type's title comes from
+    // Runtime via motor — no hardcoded fallback list here.
     const getSchemaLabel = (schemaType: string): string => {
       if (schemaType === "sja_preday") return t.sja_label;
       if (schemaType === "kjoretoyssjekk") return t.vehicle_check_label;
-      return schemaType;
+      return motor?.getSchemaFieldDefinitions(schemaType)?.label || schemaType;
     };
 
     return (
@@ -437,7 +439,7 @@ export function StartDayPhase() {
                       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         {fieldEntries.slice(0, 4).map(([key, val]) => (
                           <span key={key}>
-                            {SCHEMA_LABELS[schema.type]?.fields[key] || key}: <span className="text-foreground">{String(val)}</span>
+                            {motor?.getSchemaFieldDefinitions(schema.type)?.fields[key]?.label || key}: <span className="text-foreground">{String(val)}</span>
                           </span>
                         ))}
                       </div>
@@ -530,54 +532,10 @@ interface SchemaEditOverlayProps {
   motor: NonNullable<typeof window.Motor>;
 }
 
-// Schema display labels (for header and field labels in the overlay)
-const SCHEMA_LABELS: Record<string, { label: string; fields: Record<string, string> }> = {
-  sja_preday: {
-    label: "SJA (før arbeid)",
-    fields: {
-      oppgave: "Oppgave",
-      sted: "Sted",
-      risiko: "Risiko",
-      konsekvens: "Konsekvens",
-      tiltak: "Tiltak",
-      arbeidsvarsling: "Arbeidsvarsling",
-      godkjent: "Godkjent"
-    }
-  },
-  kjoretoyssjekk: {
-    label: "Daglig kjøretøysjekk",
-    fields: {
-      kjoretoy: "Kjøretøy",
-      dato: "Dato",
-      lys_ok: "Lys OK",
-      bremser_ok: "Bremser OK",
-      dekk_ok: "Dekk OK",
-      kommentar: "Kommentar"
-    }
-  },
-  ruh: {
-    label: "RUH-rapport",
-    fields: {
-      tidspunkt: "Tidspunkt",
-      beskrivelse: "Beskrivelse",
-      sted: "Sted",
-      arsak: "Årsak",
-      tiltak: "Tiltak"
-    }
-  }
-};
-
-// Required fields per schema type (must match motor definitions)
-const REQUIRED_FIELDS: Record<string, string[]> = {
-  sja_preday: ["oppgave", "konsekvens", "tiltak", "godkjent"],
-  kjoretoyssjekk: ["kjoretoy", "dato"],
-  ruh: ["arsak", "tiltak"]
-};
-
-// Enum options per field (matching motor schema definitions)
-const ENUM_OPTIONS: Record<string, string[]> = {
-  arbeidsvarsling: ["ingen", "enkel", "manuell", "full"]
-};
+// Generic Schema Renderer (Phase 9): field labels, required flags, and
+// enum options all come from motor.getSchemaFieldDefinitions() at
+// render time — Runtime describes the schema, React only draws it.
+// There is deliberately no hardcoded per-schema-type data left here.
 
 export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayProps) {
   const schemaError = useMotorState('schemaError');
@@ -593,8 +551,13 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
 
   if (!schema) return null;
 
-  const schemaDef = SCHEMA_LABELS[schema.type] || { label: schema.type, fields: {} };
-  const requiredFields = REQUIRED_FIELDS[schema.type] || [];
+  const fieldDefinitions = motor.getSchemaFieldDefinitions(schema.type, schema.origin);
+  const schemaDef = fieldDefinitions
+    ? { label: fieldDefinitions.label, fields: Object.fromEntries(Object.entries(fieldDefinitions.fields).map(([k, f]) => [k, f.label])) }
+    : { label: schema.type, fields: {} as Record<string, string> };
+  const requiredFields = fieldDefinitions
+    ? Object.entries(fieldDefinitions.fields).filter(([, f]) => f.required).map(([k]) => k)
+    : [];
   // In håndrens context, the schema is saved but NOT auto-confirmed by motor —
   // confirmation happens via resolveItem() in HandrensPhase.
   const isHandrens = dayLog.phase === "ending";
@@ -652,9 +615,11 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
       <main className="flex-1 px-4 py-6 overflow-auto pb-32">
         <div className="space-y-4">
           {Object.entries(schema.fields).map(([key]) => {
-            const fieldLabel = schemaDef.fields[key] || key;
+            const fieldDef = fieldDefinitions?.fields[key];
+            const fieldLabel = fieldDef?.label || schemaDef.fields[key] || key;
             const isRequired = requiredFields.includes(key);
-            const enumOptions = ENUM_OPTIONS[key];
+            const enumOptions = fieldDef?.type === "enum" ? fieldDef.options : undefined;
+            const isBooleanField = fieldDef?.type === "boolean";
             const rawValue = editState[key];
             const currentValue = rawValue === null || rawValue === undefined ? "" : rawValue;
 
@@ -700,8 +665,11 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
                       )}
                     />
                   </div>
-                ) : /* Boolean field — three-state toggle */
-                typeof currentValue === "boolean" || (currentValue === "" && (key.endsWith("_ok") || key === "godkjent")) ? (
+                ) : /* Boolean field — three-state toggle. Driven by the declared
+                       field type, not a field-name convention (e.g. "_ok" suffix) —
+                       falls back to the current value's own type only if no
+                       definition loaded yet. */
+                isBooleanField || (fieldDef === undefined && typeof currentValue === "boolean") ? (
                   <div className="flex gap-2">
                     {(["true", "false", "null"] as const).map((opt) => {
                       const optLabel = opt === "true" ? "Ja" : opt === "false" ? "Nei" : "Ikke satt";
@@ -756,7 +724,7 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
                     value={typeof currentValue === "string" ? currentValue : ""}
                     onChange={(e) => handleFieldChange(key, e.target.value || null)}
                     placeholder={`Skriv ${fieldLabel.toLowerCase()}...`}
-                    rows={key === "tiltak" || key === "konsekvens" || key === "arsak" || key === "beskrivelse" ? 3 : 2}
+                    rows={3}
                     className={cn(
                       "w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary",
                       isRequired && (currentValue === "" || currentValue === null)

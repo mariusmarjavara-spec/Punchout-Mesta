@@ -63,6 +63,19 @@ export interface MaskintimeEntry {
   timer: string;
 }
 
+/** What motor.getSchemaFieldDefinitions() returns — Phase 9's Generic Schema Renderer source of truth, replacing React's own hardcoded SCHEMA_LABELS/REQUIRED_FIELDS/ENUM_OPTIONS copies. */
+export interface SchemaFieldDefinition {
+  label: string;
+  type: 'string' | 'text' | 'boolean' | 'enum' | 'date' | 'time' | 'number';
+  required: boolean;
+  options?: string[];
+}
+
+export interface SchemaFieldDefinitions {
+  label: string;
+  fields: Record<string, SchemaFieldDefinition>;
+}
+
 export interface Schema {
   id: string;
   type: string;
@@ -232,6 +245,8 @@ declare global {
       // Operational Completion Engine + Telemetry (Phase 6.5, read-only)
       getCompletionStatus: () => CompletionStatus;
       getTelemetryLog: () => TelemetryEvent[];
+      // Generic Schema Renderer support (Phase 9, read-only)
+      getSchemaFieldDefinitions: (schemaType: string, origin?: string) => SchemaFieldDefinitions | null;
       // Export
       syncExports: () => void;
       // Report
@@ -332,7 +347,7 @@ export function useMotorSnapshot(): MotorSnapshot | undefined {
 }
 
 // Read-only motor functions that should NOT dispatch state-change events
-const READONLY_MOTOR_FUNCTIONS = new Set(['getSnapshot', 'isSchemaRequired', 'toggleVoice', 'buildHumanReadableReport', 'getUnresolvedItems', 'parseEntry', 'getCompletionStatus', 'getTelemetryLog']);
+const READONLY_MOTOR_FUNCTIONS = new Set(['getSnapshot', 'isSchemaRequired', 'toggleVoice', 'buildHumanReadableReport', 'getUnresolvedItems', 'parseEntry', 'getCompletionStatus', 'getTelemetryLog', 'getSchemaFieldDefinitions']);
 
 /**
  * Hook for calling motor functions.

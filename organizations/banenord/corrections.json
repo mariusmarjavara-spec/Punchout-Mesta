@@ -1,0 +1,12 @@
+[
+  {
+    "scenario": "Location name mentioned in speech does not textually match the order id covering that track section",
+    "category": "order",
+    "originalValue": "Hell-Værnes",
+    "knownValues": ["BS-2026-T045", "BS-2026-T046"],
+    "correctionRepeats": 4,
+    "correctedValue": "BS-2026-T045",
+    "expectedTopBeforeCorrection": "BS-2026-T046",
+    "expectedTopAfterCorrection": "BS-2026-T045"
+  }
+]

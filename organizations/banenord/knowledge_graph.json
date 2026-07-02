@@ -1,0 +1,13 @@
+{
+  "activities": [
+    { "id": "sporrensk", "label": "Sporrensk", "machineTypes": ["sporgaende_arbeidsmaskin"], "keywords": ["sporrenska", "rensket spor", "sporrensk"] },
+    { "id": "skinnebytte", "label": "Skinnebytte", "machineTypes": ["skinneslip"], "keywords": ["byttet skinne", "skinnebytte", "slipt skinne"] }
+  ],
+  "machineTypes": [
+    { "id": "sporgaende_arbeidsmaskin", "label": "Sporgående arbeidsmaskin SGA-2", "requiredSchemas": ["sporarbeidstillatelse"], "recommendedSchemas": [], "externalSystems": ["banenis"] },
+    { "id": "skinneslip", "label": "Skinneslipemaskin SS-9", "requiredSchemas": ["sporarbeidstillatelse"], "recommendedSchemas": [], "externalSystems": ["banenis"] }
+  ],
+  "orderTypes": [
+    { "id": "banevedlikehold", "label": "Banevedlikehold", "activities": ["sporrensk", "skinnebytte"] }
+  ]
+}

@@ -1,0 +1,33 @@
+[
+  {
+    "schemaType": "sporarbeidstillatelse",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "pre_day",
+    "title": "Sporarbeidstillatelse",
+    "triggers": ["sporarbeidstillatelse", "spor-tillatelse", "tillatelse"],
+    "sections": [
+      { "id": "omfang", "title": "Omfang", "fields": ["strekning", "arbeidsvindu"] },
+      { "id": "sikkerhet", "title": "Sikkerhet", "fields": ["konsekvens", "tiltak", "godkjent"] }
+    ],
+    "fields": {
+      "strekning": { "label": "Strekning", "type": "text", "required": true, "helpText": "Kilometer-til-kilometer eller stasjonsnavn" },
+      "arbeidsvindu": { "label": "Arbeidsvindu", "type": "text", "required": true },
+      "konsekvens": { "label": "Konsekvens", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false },
+      "godkjent": { "label": "Godkjent av togleder", "type": "boolean", "required": true }
+    }
+  },
+  {
+    "schemaType": "sikkerhetsavvik",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "drift",
+    "title": "Sikkerhetsavvik",
+    "fields": {
+      "beskrivelse": { "label": "Beskrivelse", "type": "text", "required": false },
+      "arsak": { "label": "Årsak", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false }
+    }
+  }
+]
