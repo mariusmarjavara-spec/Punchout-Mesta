@@ -1,0 +1,27 @@
+[
+  {
+    "schemaType": "dammsikkerhetssjekk",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "pre_day",
+    "title": "Dammsikkerhetssjekk",
+    "triggers": ["dammsikkerhetssjekk", "damsjekk"],
+    "fields": {
+      "dam": { "label": "Dam", "type": "text", "required": true, "helpText": "Navn på dammen som inspiseres" },
+      "vannstand_ok": { "label": "Vannstand OK", "type": "boolean", "required": true },
+      "lekkasje_observert": { "label": "Lekkasje observert", "type": "boolean", "required": false }
+    }
+  },
+  {
+    "schemaType": "elsikkerhetsavvik",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "drift",
+    "title": "Elsikkerhetsavvik",
+    "fields": {
+      "beskrivelse": { "label": "Beskrivelse", "type": "text", "required": false },
+      "arsak": { "label": "Årsak", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false }
+    }
+  }
+]

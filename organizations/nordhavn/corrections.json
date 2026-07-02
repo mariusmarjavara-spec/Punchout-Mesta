@@ -7,6 +7,7 @@
     "correctionRepeats": 6,
     "correctedValue": "NHT-2026-0451",
     "expectedTopBeforeCorrection": "NHT-2026-0452",
-    "expectedTopAfterCorrection": "NHT-2026-0451"
+    "expectedTopAfterCorrection": "NHT-2026-0451",
+    "todaysConfirmedValue": "NHT-2026-0452"
   }
 ]

@@ -1,0 +1,74 @@
+{
+  "organizationId": "nordkraft",
+  "name": "Nordkraft Vannkraft AS",
+  "orders": [
+    { "id": "NK-2026-D12", "description": "Tilsyn dam D12 Storvatn", "active": true },
+    { "id": "NK-2026-T04", "description": "Turbinvedlikehold aggregat 4", "active": true }
+  ],
+  "machines": [
+    { "id": "m1", "type": "inspeksjonsdrone", "label": "Inspeksjonsdrone ID-3" },
+    { "id": "m2", "type": "kranbil", "label": "Kranbil KB-7" }
+  ],
+  "vehicles": [],
+  "wageCodes": [
+    { "kode": "K100", "label": "Ordinær kraftverkstid" },
+    { "kode": "K200", "label": "Beredskapstillegg" }
+  ],
+  "procedures": [],
+  "externalLinks": [
+    { "id": "damsys", "title": "Logg inn i DamSys", "url": "https://damsys.example.no/login" }
+  ],
+  "sjaDefaults": null,
+  "rules": [
+    {
+      "id": "rule_elsikkerhetsavvik_on_incident",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "incidentReported" },
+      "conditions": [{ "field": "incidentReported", "operator": "equals", "value": true }],
+      "action": { "type": "requireSchema", "target": "elsikkerhetsavvik" },
+      "priority": 100,
+      "affects": { "schemaTypes": ["elsikkerhetsavvik"] }
+    },
+    {
+      "id": "rule_required_schema_from_machine",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "requiredSchemaFromMachine" },
+      "conditions": [],
+      "action": { "type": "requireSchema", "target": "$factValue" },
+      "priority": 80,
+      "affects": {}
+    }
+  ],
+  "capabilityProviders": [
+    { "id": "internal_schema_registry", "kind": "schema" },
+    { "id": "damsys", "kind": "adapter" }
+  ],
+  "capabilityBindings": [
+    { "capability": "dammsikkerhetssjekk", "providerId": "internal_schema_registry", "config": { "schemaType": "dammsikkerhetssjekk" } },
+    { "capability": "elsikkerhetsavvik", "providerId": "internal_schema_registry", "config": { "schemaType": "elsikkerhetsavvik" } }
+  ],
+  "rankingWeights": {
+    "maxAliasBonus": 15,
+    "maxOrganizationBonus": 5,
+    "maxRecencyBonus": 5,
+    "recencyPerOccurrence": 2,
+    "correctionBonusThresholds": [
+      { "minCount": 1, "bonus": 3 },
+      { "minCount": 3, "bonus": 9 },
+      { "minCount": 6, "bonus": 16 },
+      { "minCount": 12, "bonus": 20 }
+    ]
+  },
+  "capabilityKindExpectations": {
+    "dammsikkerhetssjekk": "schema",
+    "elsikkerhetsavvik": "schema"
+  },
+  "extractionPatterns": {
+    "ordre": "\\b(NK-\\d{4}-[A-Z]\\d{1,3})\\b"
+  },
+  "extractionVocabularies": {
+    "incidentKeywords": ["elsikkerhetsavvik", "lekkasje", "faresituasjon", "nestenulykke"]
+  }
+}

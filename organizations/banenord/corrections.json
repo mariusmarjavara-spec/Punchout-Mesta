@@ -7,6 +7,7 @@
     "correctionRepeats": 4,
     "correctedValue": "BS-2026-T045",
     "expectedTopBeforeCorrection": "BS-2026-T046",
-    "expectedTopAfterCorrection": "BS-2026-T045"
+    "expectedTopAfterCorrection": "BS-2026-T045",
+    "todaysConfirmedValue": "BS-2026-T046"
   }
 ]

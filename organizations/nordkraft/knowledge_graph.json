@@ -1,0 +1,13 @@
+{
+  "activities": [
+    { "id": "tilsyn", "label": "Tilsyn", "machineTypes": ["inspeksjonsdrone"], "keywords": ["tilsyn", "inspiserte", "inspeksjon"] },
+    { "id": "turbinvedlikehold", "label": "Turbinvedlikehold", "machineTypes": ["kranbil"], "keywords": ["turbinvedlikehold", "vedlikeholdt turbin"] }
+  ],
+  "machineTypes": [
+    { "id": "inspeksjonsdrone", "label": "Inspeksjonsdrone ID-3", "requiredSchemas": ["dammsikkerhetssjekk"], "recommendedSchemas": [], "externalSystems": ["damsys"] },
+    { "id": "kranbil", "label": "Kranbil KB-7", "requiredSchemas": ["dammsikkerhetssjekk"], "recommendedSchemas": [], "externalSystems": ["damsys"] }
+  ],
+  "orderTypes": [
+    { "id": "vannkraftdrift", "label": "Vannkraftdrift", "activities": ["tilsyn", "turbinvedlikehold"] }
+  ]
+}

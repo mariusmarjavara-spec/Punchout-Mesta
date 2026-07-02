@@ -446,6 +446,16 @@ var CONVERSION_SCHEMAS = {
 if (INJECTED_RUNTIME && Array.isArray(INJECTED_RUNTIME.schemas)) {
   for (var _si = 0; _si < INJECTED_RUNTIME.schemas.length; _si++) {
     var _s = INJECTED_RUNTIME.schemas[_si];
+    // Defensive: this runs synchronously at module load — a crash here
+    // would break the entire app, not just one schema. A malformed
+    // entry (should never happen if compileRuntime() ran, but a
+    // corrupted/hand-edited Runtime could still reach here) is skipped
+    // with a warning instead, leaving whatever default existed for that
+    // schema type untouched. Found via Phase 10 robustness testing.
+    if (!_s || typeof _s.schemaType !== "string" || !_s.fields || typeof _s.fields !== "object") {
+      console.error("Skipping malformed injected schema at index " + _si + ":", _s);
+      continue;
+    }
     var _bucket = _s.origin === "pre_day" ? PRE_DAY_SCHEMAS
       : _s.origin === "drift" ? DRIFT_SCHEMAS
       : _s.origin === "conversion" ? CONVERSION_SCHEMAS

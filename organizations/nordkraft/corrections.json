@@ -1,0 +1,13 @@
+[
+  {
+    "scenario": "Dam name mentioned in speech does not textually match the order id covering it",
+    "category": "order",
+    "originalValue": "Storvatn",
+    "knownValues": ["NK-2026-D12", "NK-2026-T04"],
+    "correctionRepeats": 3,
+    "correctedValue": "NK-2026-D12",
+    "expectedTopBeforeCorrection": "NK-2026-T04",
+    "expectedTopAfterCorrection": "NK-2026-D12",
+    "todaysConfirmedValue": "NK-2026-T04"
+  }
+]
