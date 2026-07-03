@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
-import { exportLog, recordExport, getDeviceSecret, isDeviceRegistered } from "@/lib/backend/state.mjs";
+import { exportLog, recordExport, getDeviceSecret, isDeviceRegistered, isDeviceActive } from "@/lib/backend/state.mjs";
 
 /**
  * Del 4: the real export endpoint. Verifies the EXACT HMAC scheme
@@ -62,6 +62,16 @@ export async function POST(req: NextRequest) {
   if (!isDeviceRegistered(deviceId)) {
     recordExport({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid: false, rejectedReason: "unregistered_device" });
     return NextResponse.json({ error: "unknown device — register it via /api/devices/register before exporting" }, { status: 401 });
+  }
+
+  // Execution Sprint 1 Oppgave 1: a KNOWN but disabled device is rejected
+  // regardless of signature validity — checked before verifySignature so a
+  // disabled device can never "win a race" against its own revocation by
+  // presenting a still-valid signature. 403 (identity known, action
+  // forbidden), distinct from 401 (identity unknown/invalid) above.
+  if (!isDeviceActive(deviceId)) {
+    recordExport({ receivedAt: new Date().toISOString(), exportId, organizationId: packet.userId || "unknown", deviceId, signatureValid: false, rejectedReason: "device_disabled" });
+    return NextResponse.json({ error: "this device has been disabled and can no longer export — contact your administrator" }, { status: 403 });
   }
 
   const signatureValid = await verifySignature(deviceId, rawBody, signatureHeader);
