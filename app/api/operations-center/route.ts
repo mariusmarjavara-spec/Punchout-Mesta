@@ -1,28 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
 import { telemetryLog, exportLog, getHistory } from "@/lib/backend/state.mjs";
+// @ts-ignore
+import { completionRate, exportHealth, runtimeAdoption, ruleFrequency, promptOutcomeByTarget } from "@/lib/operations-center/metrics.mjs";
 
 /**
- * Del 5 (Phase 11) / Del 4 (Phase A): Operations Center must never show
- * placeholder data as if it were a real measurement.
+ * Del 5 (Phase 11) / Del 4 (Phase A) / Del 7 (Validation Sprint):
+ * Operations Center must never show placeholder data as if it were a
+ * real measurement.
  *
  * Phase A finding: this route previously called platformHealth() with
  * regressionResults/crossOrgResults/correctionEntries hardcoded to []
- * and compileAttempts derived from publish HISTORY (which by
- * construction can only ever contain successes — a failed compile is
- * never stored anywhere). That made regressionStatus.failing.length===0
- * and organizationCompatibility.incompatible.length===0 read as "zero
- * failures measured," and runtimeValidation.validRate read as a
- * meaningful 100% — none of which was true; it was an artifact of
- * feeding a CI-shaped function empty/incomplete inputs. platformHealth()
- * itself is untouched and still correct when fed real CI data (see
- * lib/regression/*, still used that way) — the fix is in what this
- * per-organization LIVE endpoint is honest about.
+ * — fixed by only reporting what's actually observable per-organization
+ * (see git history for that finding's full detail).
  *
- * This route now computes only what it can actually observe from real
- * backend state (telemetry, export log, publish history) and marks
- * everything else explicitly unavailable, with a reason, in
- * `dataAvailability`. No panel here is a guess.
+ * Validation Sprint Del 7 finding: lib/operations-center/metrics.mjs
+ * (completionRate, exportHealth, runtimeAdoption, ruleFrequency,
+ * promptOutcomeByTarget) has existed since Phase 6.5 as pure functions
+ * over TelemetryEvent[] — real, already-tested analytics — but this
+ * live route never called them; it only surfaced a small hand-rolled
+ * subset. Del 7 explicitly asks "kan man se Completion Rate / se
+ * Runtime-adopsjon?" — the honest answer was no, not because the data
+ * didn't exist, but because nothing wired it up. This wires them in,
+ * fed by the SAME real orgTelemetry array already computed below. No
+ * new metric is invented; every one of these already existed and was
+ * already covered by earlier phases' dry runs against synthetic data —
+ * this is the first time they run against live backend telemetry.
  */
 export async function GET(req: NextRequest) {
   const organizationId = req.nextUrl.searchParams.get("org");
@@ -32,20 +35,17 @@ export async function GET(req: NextRequest) {
   const orgExports = exportLog.filter((e: any) => e.organizationId === organizationId);
   const history = getHistory(organizationId);
 
-  const exportEvents = orgTelemetry.filter((t: any) => t.type === "ExportSucceeded" || t.type === "ExportFailed");
-  const exportSuccess = {
-    total: exportEvents.length,
-    successRate: exportEvents.length ? exportEvents.filter((t: any) => t.type === "ExportSucceeded").length / exportEvents.length : null,
-  };
-
   const health = {
-    exportSuccess,
+    exportHealth: exportHealth(orgTelemetry),
+    completionRate: completionRate(orgTelemetry),
+    runtimeAdoption: runtimeAdoption(orgTelemetry),
+    ruleFrequency: ruleFrequency(orgTelemetry),
+    promptOutcomeByTarget: promptOutcomeByTarget(orgTelemetry),
     publishHistory: { totalPublishes: history.length, activeVersion: history.find((m: any) => m.status === "active")?.runtimeVersion ?? null },
     regressionStatus: null,
     organizationCompatibility: null,
     runtimeValidation: null,
     correctionMemoryHealth: null,
-    overallRobust: null,
   };
 
   return NextResponse.json({
@@ -55,13 +55,17 @@ export async function GET(req: NextRequest) {
     telemetryEventCount: orgTelemetry.length,
     health,
     dataAvailability: {
-      exportSuccess: "live — computed from telemetry received by this backend",
+      exportHealth: "live — lib/operations-center/metrics.mjs::exportHealth() over telemetry received by this backend",
+      completionRate: "live — lib/operations-center/metrics.mjs::completionRate() over telemetry received by this backend",
+      runtimeAdoption: "live — lib/operations-center/metrics.mjs::runtimeAdoption() over telemetry received by this backend",
+      ruleFrequency: "live — lib/operations-center/metrics.mjs::ruleFrequency() over telemetry received by this backend",
+      promptOutcomeByTarget: "live — lib/operations-center/metrics.mjs::promptOutcomeByTarget() over telemetry received by this backend",
       publishHistory: "live — computed from this organization's Runtime Store",
       regressionStatus: "not_available — regression suite is a whole-codebase CI signal, not per-organization production data; not wired to this endpoint",
       organizationCompatibility: "not_available — cross-organization suite is a CI signal, not per-organization production data",
       runtimeValidation: "not_available — publish history only ever contains successful compiles by construction; a validRate computed from it would be a meaningless constant 100%, not a real measurement",
       correctionMemoryHealth: "not_available — Correction Memory is user-scoped and client-side; the backend has no visibility into it",
     },
-    dataSource: "live", // every non-null field above is computed from real backend state, never fabricated
+    dataSource: "live", // every non-null field above is computed from real backend state via already-existing, already-tested pure functions — nothing fabricated, nothing new invented
   });
 }
