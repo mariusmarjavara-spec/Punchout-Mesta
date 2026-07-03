@@ -5238,6 +5238,26 @@ function syncExports() {
 
 // --- Export init (called from init()) ---
 
+// Validation Sprint Del 3 finding: a failed export backs off exponentially
+// (up to 1 hour) to avoid hammering an unreachable server — correct while
+// the reason for failure is unknown. But the browser's `online` event is a
+// DEFINITIVE signal that connectivity just returned, not a guess — waiting
+// out the rest of an hour-long backoff after that signal fires is a real
+// user-visible delay with no benefit. Reset backoff and retry immediately
+// when it fires; the exponential backoff still applies normally to repeated
+// failures in between online events.
+function resetFailedExportsForRetry() {
+  var outbox = loadOutbox();
+  var changed = false;
+  for (var i = 0; i < outbox.length; i++) {
+    if (outbox[i].status === "failed" && outbox[i].retries < 10) {
+      outbox[i].nextAttempt = null;
+      changed = true;
+    }
+  }
+  if (changed) saveOutbox(outbox);
+}
+
 function initExportSync() {
   resetStuckExports();
   cleanOldSentExports();
@@ -5248,6 +5268,12 @@ function initExportSync() {
       syncExports();
     }
   });
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("online", function () {
+      resetFailedExportsForRetry();
+      syncExports();
+    });
+  }
 }
 
 // ============================================================
@@ -5697,6 +5723,9 @@ function initTelemetrySync() {
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") flushTelemetry();
   });
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("online", function () { flushTelemetry(); });
+  }
 }
 
 // ============================================================
