@@ -26,3 +26,9 @@ jobs:
 
       - name: Runtime validation (all organization packages, full-day scenario)
         run: node lib/regression/cross-organization.mjs
+
+      - name: Adapter dry run (all registered adapters)
+        run: node lib/adapters/dry-run.mjs
+
+      - name: Adapter performance (100/500/1000 export packages)
+        run: node lib/regression/adapter-performance.mjs
