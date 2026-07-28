@@ -5,6 +5,8 @@ import { compileFromPackage, publish } from "@/lib/backend/state.mjs";
 import { runFullDayScenario } from "@/lib/regression/full-day-scenario.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /**
  * Del 2 steps: Approve -> Publish -> Sign -> Deploy, as one call for MVP
@@ -22,7 +24,7 @@ import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
  * unauthenticated caller can never reach the approve/compile/dry-run
  * stages at all, not just the final publish.
  */
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
@@ -48,3 +50,5 @@ export async function POST(req: NextRequest) {
     manifest,
   }, { status: 201 });
 }
+
+export const POST = withRequestLog("/api/runtime/publish", handlePost);

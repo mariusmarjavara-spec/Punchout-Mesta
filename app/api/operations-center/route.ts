@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { telemetryLog, exportLog, getHistory } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { completionRate, exportHealth, runtimeAdoption, ruleFrequency, promptOutcomeByTarget } from "@/lib/operations-center/metrics.mjs";
+// @ts-ignore
+import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /**
  * Del 5 (Phase 11) / Del 4 (Phase A) / Del 7 (Validation Sprint):
@@ -26,8 +30,20 @@ import { completionRate, exportHealth, runtimeAdoption, ruleFrequency, promptOut
  * new metric is invented; every one of these already existed and was
  * already covered by earlier phases' dry runs against synthetic data —
  * this is the first time they run against live backend telemetry.
+ *
+ * Execution Sprint 4, Oppgave 3 finding: this route had NO auth check at
+ * all — confirmed live (200 with full telemetry/export/runtime data, no
+ * Authorization header, for any guessed ?org=). Execution Sprint 1
+ * Oppgave 5 already fixed this exact class of bug for
+ * /api/runtime/history (see that file) but it was never applied here,
+ * even though this route leaks strictly more: telemetry content and
+ * export logs, not just publish metadata. Now admin-gated, matching the
+ * rest of the admin surface.
  */
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest) {
+  const auth = verifyAdminAuth(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
+
   const organizationId = req.nextUrl.searchParams.get("org");
   if (!organizationId) return NextResponse.json({ error: "org query param required" }, { status: 400 });
 
@@ -69,3 +85,5 @@ export async function GET(req: NextRequest) {
     dataSource: "live", // every non-null field above is computed from real backend state via already-existing, already-tested pure functions — nothing fabricated, nothing new invented
   });
 }
+
+export const GET = withRequestLog("/api/operations-center", handleGet);

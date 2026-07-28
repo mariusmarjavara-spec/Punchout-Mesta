@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHistory } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /**
  * Execution Sprint 1 Oppgave 5 finding: this route had no auth at all —
@@ -13,7 +15,7 @@ import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
  * organizationId a caller can guess. Now admin-gated, matching compile/
  * dry-run/publish/rollback.
  */
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
@@ -21,3 +23,5 @@ export async function GET(req: NextRequest) {
   if (!organizationId) return NextResponse.json({ error: "org query param required" }, { status: 400 });
   return NextResponse.json(getHistory(organizationId));
 }
+
+export const GET = withRequestLog("/api/runtime/history", handleGet);

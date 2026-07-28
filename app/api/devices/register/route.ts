@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { registerDevice, listDevices } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /**
  * Phase A Del 1/6: explicit device registration. Closes the gap where
@@ -14,7 +16,7 @@ import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
  * as a hash-equivalent plain value for HMAC verification (not retrievable
  * again via GET), matching how a real secret-provisioning flow behaves.
  */
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
@@ -26,8 +28,11 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ deviceId, secret, note: "store this secret on the device now — it will not be shown again" }, { status: 201 });
 }
 
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
   return NextResponse.json({ devices: listDevices() });
 }
+
+export const POST = withRequestLog("/api/devices/register", handlePost);
+export const GET = withRequestLog("/api/devices/register", handleGet);

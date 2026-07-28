@@ -3,13 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { revokeDevice } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /**
  * Execution Sprint 1 Oppgave 1: disables a device's export access without
  * deleting its identity or history — for a lost/stolen/decommissioned
  * device. Admin-gated, same bearer token as Runtime administration.
  */
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
@@ -20,3 +22,5 @@ export async function POST(req: NextRequest) {
   const result = revokeDevice(deviceId, revokedBy || "unknown");
   return NextResponse.json(result, { status: result.ok ? 200 : 404 });
 }
+
+export const POST = withRequestLog("/api/devices/revoke", handlePost);

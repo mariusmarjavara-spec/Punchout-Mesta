@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { compileFromPackage } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /**
  * Del 2 step: Draft -> Compile -> Validate. Does not publish. Loads the
@@ -14,7 +16,7 @@ import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
  * Runtime shape/validation errors, which is administration, not a
  * public read.
  */
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
@@ -32,3 +34,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, stage: "compile", error: String(e?.message || e) }, { status: 400 });
   }
 }
+
+export const POST = withRequestLog("/api/runtime/compile", handlePost);

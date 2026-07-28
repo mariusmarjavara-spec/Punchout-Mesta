@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { rollback } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
 /** Del 2/6: Rollback — reactivates an older manifest, nothing deleted (lib/runtime/store.mjs, unchanged since Phase 6). Phase A Del 1/5: admin-gated. */
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
@@ -17,3 +19,5 @@ export async function POST(req: NextRequest) {
   const result = rollback(organizationId, toVersion);
   return NextResponse.json(result, { status: result.ok ? 200 : 404 });
 }
+
+export const POST = withRequestLog("/api/runtime/rollback", handlePost);
