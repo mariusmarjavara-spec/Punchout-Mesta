@@ -1,0 +1,42 @@
+# Execution Sprint 4, Oppgave 2. Not deployed by this sprint — no Fly.io
+# account/credentials available in this environment. Written to match
+# docs/deployment-decision.md's decision (Fly.io, persistent volume, no
+# serverless) and this repo's actual, verified env vars
+# (lib/backend/auth.mjs's PUNCHOUT_ADMIN_TOKEN, lib/backend/persistence.mjs's
+# PUNCHOUT_DATA_DIR) — reviewed and buildable-against, not deployed.
+#
+# Before first deploy, an operator with real Fly.io access must:
+#   fly launch --no-deploy   (or manually create the app; adjust `app` below)
+#   fly volumes create punchout_data --size 1 --region <region>
+#   fly secrets set PUNCHOUT_ADMIN_TOKEN=<a real, random secret>
+#   fly deploy
+# See docs/deploy-runbook.md for the full procedure.
+
+app = "punchout-pilot"           # placeholder — set to the real app name at `fly launch` time
+primary_region = "arn"           # placeholder — Stockholm; nearest Fly.io region to Norway, adjust if a closer one exists at deploy time
+
+[build]
+
+[env]
+  PUNCHOUT_DATA_DIR = "/data"
+  PORT = "3000"
+  # PUNCHOUT_ADMIN_TOKEN is intentionally NOT set here — it must be a
+  # secret (`fly secrets set`), never committed to this file or the image.
+
+[[mounts]]
+  source = "punchout_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false     # avoid cold starts silently reintroducing the serverless-style volume-availability risk deployment-decision.md ruled out
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/api/health"

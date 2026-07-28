@@ -1,5 +1,22 @@
 # Deployment — hostingmodell (Oppgave 4)
 
+## Oppdatering — Execution Sprint 4, Oppgave 1/2
+
+Denne rapportens kjernefunn under ("dette repoet har ALDRI hatt en vellykket produksjonsbygg
+bekreftet noe sted") er **rettet**: `npm run build` ble kjørt direkte i Execution Sprint 4 og
+**lyktes**, i et miljø med internettilgang. Sandkasse-miljøet som skrev denne rapporten hadde
+ingen utgående internettilgang, og appen bruker `next/font/google` (`app/layout.tsx`), som
+trenger nettverk ved byggetidspunktet — feilen var miljøspesifikk, ikke et reelt produktfunn.
+`npm run start` og en manuelt bygget `.next/standalone`-server (se `Dockerfile`) er begge
+bekreftet å faktisk serve appen, inkludert `/api/health` og statiske filer (`/motor.js`).
+
+Punkt 1 i sjekklisten under ("Skriv en standard Next.js Dockerfile") er nå gjort — se
+`Dockerfile` og `fly.toml` i repo-roten, og `docs/deploy-runbook.md` for full prosedyre. Punkt 4
+("Bekreft next build faktisk fullfører") er nå bekreftet. Punktene 2 og 3 (faktisk volum,
+faktisk hemmelighet) og selve deployet krever fortsatt reell Fly.io-/Railway-tilgang som ikke
+finnes i noe miljø disse rapportene er skrevet i — `Dockerfile`/`fly.toml` er reviderte,
+bygg-verifiserte artefakter, ikke et bekreftet, kjørende deploy.
+
 ## Beslutning
 
 **Fly.io (eller likeverdig: Railway) — en tradisjonell, langlevende prosess med persistent volum. Ikke Vercel eller annen serverless-plattform.**
