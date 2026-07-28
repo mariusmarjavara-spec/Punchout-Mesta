@@ -52,3 +52,9 @@ Tidsbruk: under 5 minutter. Hvis noe avviker, gå til Incident Checklist.
 **Hvordan:** kopier filen til et separat, sikkert lagringssted (ikke samme disk/volum som produksjonsserveren). Én kommando, kan kjøres manuelt hver morgen som del av Daily Checklist eller rett før.
 
 **Hvordan testes backup:** minst én gang før pilot starter — gjenopprett en kopiert backup-fil til en TOM `PUNCHOUT_DATA_DIR` på en separat testinstans, start serveren, og bekreft `GET /api/health` viser korrekte enhets-/kø-tall og `GET /api/runtime/history` (med admin-token) viser forventet historikk. En backup som aldri er gjenopprettet er ikke en verifisert backup.
+
+**Oppdatering, Execution Sprint 4**: dette er nå faktisk gjort — se `docs/deploy-runbook.md` §4
+og `lib/regression/backup-restore-drill.mjs` (kjøres automatisk av `npm test`) for både den
+manuelt kjørte engangs-øvelsen og den permanente, automatiserte versjonen. Utført i utviklingsmiljø
+mot en lokal instans, ikke mot en reell produksjonsserver (som ikke finnes ennå) — prosedyren er
+bevist, den faktiske pilot-infrastrukturen er det ikke.
