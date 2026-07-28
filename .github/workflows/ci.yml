@@ -32,3 +32,31 @@ jobs:
 
       - name: Adapter performance (100/500/1000 export packages)
         run: node lib/regression/adapter-performance.mjs
+
+      - name: Security audit (live HTTP against every admin route)
+        run: node lib/regression/security-audit.mjs
+
+      # Execution Sprint 4, Oppgave 1/6: `next build` was never run in CI before
+      # this — the only way anyone would have discovered a build break was a
+      # human running it manually. Placed after the fast logic/regression
+      # checks (fail fast on cheaper checks first), before the artifact step.
+      - name: Production build
+        run: npm run build
+
+      # Assembles the exact same deployable directory the Dockerfile's COPY
+      # steps produce (organizations/ is required at runtime — read via
+      # fs.readFileSync by lib/organization-package/loader.mjs, not traced as
+      # an import), so a successful CI run leaves something a human can
+      # actually download and run with `node server.js`, not just a pass/fail.
+      - name: Assemble standalone artifact
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          mkdir -p .next/standalone/public .next/standalone/organizations
+          cp -r public/. .next/standalone/public/
+          cp -r organizations/. .next/standalone/organizations/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: punchout-standalone-build
+          path: .next/standalone
+          retention-days: 14
