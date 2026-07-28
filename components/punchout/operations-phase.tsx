@@ -71,6 +71,14 @@ export function OperationsPhase() {
   // UI-only view state, not a motor concept — the correction itself is a plain new entry
   // submitted through motor.submitEntry(), never a mutation of the locked one.
   const [correctingIndex, setCorrectingIndex] = useState<number | null>(null);
+  // Execution Sprint 3, Oppgave 4: tale (Web Speech API) requires network — motor.js only
+  // discovers this reactively via recognition.onerror's "network" case, after the mic already
+  // opened. This pre-flight check avoids that round-trip when we already know we're offline.
+  const [voiceBlockedByOffline, setVoiceBlockedByOffline] = useState(false);
+
+  useEffect(() => {
+    if (isOnline) setVoiceBlockedByOffline(false);
+  }, [isOnline]);
 
   // Get entries from motor (READ-ONLY)
   const entries = dayLog?.entries || [];
@@ -223,7 +231,14 @@ export function OperationsPhase() {
         <div className="flex flex-col items-center gap-4 py-8">
           <VoiceButton
             isListening={voiceState === "listening"}
-            onClick={() => motor?.toggleVoice()}
+            onClick={() => {
+              if (voiceState !== "listening" && !isOnline) {
+                setVoiceBlockedByOffline(true);
+                return;
+              }
+              setVoiceBlockedByOffline(false);
+              motor?.toggleVoice();
+            }}
             label={
               voiceState === "listening" ? "Lytter..." :
               voiceState === "processing" ? "Behandler..." :
@@ -233,7 +248,9 @@ export function OperationsPhase() {
             disabled={!voiceSupported || voiceState === "processing"}
             className="bg-green-600 hover:bg-green-700"
           />
-          {voiceState === "error" && voiceError ? (
+          {voiceBlockedByOffline ? (
+            <p className="text-sm text-destructive">Tale krever nettforbindelse. Skriv i stedet.</p>
+          ) : voiceState === "error" && voiceError ? (
             <p className="text-sm text-destructive">{voiceError}</p>
           ) : (
             <p className="text-sm text-muted-foreground">

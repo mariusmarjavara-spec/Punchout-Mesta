@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 
 
 import { useMotorState, useMotor, Schema, UxState, DayLog } from "@/hooks/use-motor-state";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { VoiceButton } from "./voice-button";
 import { cn } from "@/lib/utils";
 import { Check, ChevronRight, ExternalLink, FileText, X, Languages } from "lucide-react";
@@ -109,6 +110,14 @@ export function StartDayPhase() {
   // when a required schema is unconfirmed — but only alert()s in vanilla mode. This surfaces
   // the same, real block in React mode instead of letting the button silently no-op.
   const [continueBlockedMessage, setContinueBlockedMessage] = useState<string | null>(null);
+  // Execution Sprint 3, Oppgave 4: pre-flight network check before opening the mic — see the
+  // matching change in operations-phase.tsx for the full rationale.
+  const isOnline = useOnlineStatus();
+  const [voiceBlockedByOffline, setVoiceBlockedByOffline] = useState(false);
+
+  useEffect(() => {
+    if (isOnline) setVoiceBlockedByOffline(false);
+  }, [isOnline]);
   // Text input for start-idle (optional, passed to startDay if filled)
   const [startText, setStartText] = useState('');
 
@@ -261,15 +270,27 @@ export function StartDayPhase() {
 
             {/* Voice button — only shown when voice is supported */}
             {voiceSupported && (
-              <VoiceButton
-                isListening={false}
-                onClick={() => {
-                  setStartUIState('listening');
-                  motor?.toggleVoice();
-                }}
-                label={t.start_button}
-                size="xl"
-              />
+              <div className="flex flex-col items-center gap-2">
+                <VoiceButton
+                  isListening={false}
+                  onClick={() => {
+                    if (!isOnline) {
+                      setVoiceBlockedByOffline(true);
+                      return;
+                    }
+                    setVoiceBlockedByOffline(false);
+                    setStartUIState('listening');
+                    motor?.toggleVoice();
+                  }}
+                  label={t.start_button}
+                  size="xl"
+                />
+                {voiceBlockedByOffline && (
+                  <p className="max-w-xs text-center text-sm text-destructive">
+                    Tale krever nettforbindelse. Skriv i tekstfeltet over i stedet.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -305,7 +326,14 @@ export function StartDayPhase() {
 
             <VoiceButton
               isListening={voiceState === "listening"}
-              onClick={() => motor?.toggleVoice()}
+              onClick={() => {
+                if (voiceState !== "listening" && !isOnline) {
+                  setVoiceBlockedByOffline(true);
+                  return;
+                }
+                setVoiceBlockedByOffline(false);
+                motor?.toggleVoice();
+              }}
               label={
                 voiceState === "listening" ? "Lytter..." :
                 voiceState === "processing" ? "Behandler..." :
@@ -315,7 +343,11 @@ export function StartDayPhase() {
               disabled={!voiceSupported || voiceState === "processing"}
             />
 
-            {voiceState === "error" && voiceError ? (
+            {voiceBlockedByOffline ? (
+              <p className="max-w-xs text-center text-sm text-destructive">
+                Tale krever nettforbindelse.
+              </p>
+            ) : voiceState === "error" && voiceError ? (
               <p className="max-w-xs text-center text-sm text-destructive">
                 {voiceError}
               </p>
