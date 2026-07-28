@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, X } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 interface StaleDayBannerProps {
   date: string;
@@ -11,14 +11,14 @@ interface StaleDayBannerProps {
 /**
  * StaleDayBanner - Shown when the app opens with data from a previous day.
  *
- * Non-blocking: user can dismiss, continue, end, or discard.
+ * Non-blocking, but no silent dismiss: the user must pick one of the 3 real actions
+ * (continue/end/discard) — Execution Sprint 3, Oppgave 6. The report found the previous "X"
+ * dismiss resolved nothing (no motor call), just hid the banner until the next reload, when
+ * it would reappear — an unresolved state the user could easily mistake for a resolved one.
  * Motor detects stale day via isStaleDay(), React projects it here.
  */
 export function StaleDayBanner({ date, motor }: StaleDayBannerProps) {
-  const [dismissed, setDismissed] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-
-  if (dismissed) return null;
 
   const formattedDate = (() => {
     try {
@@ -76,10 +76,7 @@ export function StaleDayBanner({ date, motor }: StaleDayBannerProps) {
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
             <button
-              onClick={() => {
-                motor.continueStaleDay();
-                setDismissed(true);
-              }}
+              onClick={() => motor.continueStaleDay()}
               type="button"
               className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-all active:scale-95"
             >
@@ -101,13 +98,6 @@ export function StaleDayBanner({ date, motor }: StaleDayBannerProps) {
             </button>
           </div>
         </div>
-        <button
-          onClick={() => setDismissed(true)}
-          type="button"
-          className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );

@@ -274,7 +274,7 @@ function MainTimeCard({
         <div className="flex-1 min-w-0">
           <p className="font-medium text-card-foreground">Hovedtimeføring</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {startTime} – {endTime}
+            Timene dine for dagen — {startTime} – {endTime}
           </p>
         </div>
         <button
@@ -292,6 +292,9 @@ function MainTimeCard({
           {lonnskoder.length > 0 ? (
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lønnskoder</p>
+              <p className="text-xs text-muted-foreground/70">
+                Hvilken timekode arbeidet føres på (f.eks. ordinær tid, overtid)
+              </p>
               {lonnskoder.map((lk, i) => (
                 <div key={i} className="flex items-center justify-between text-sm">
                   <span className="font-mono">{lk.kode}</span>
