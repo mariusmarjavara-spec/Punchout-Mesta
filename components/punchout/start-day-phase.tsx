@@ -7,6 +7,8 @@ import { useMotorState, useMotor, Schema, UxState, DayLog } from "@/hooks/use-mo
 import { VoiceButton } from "./voice-button";
 import { cn } from "@/lib/utils";
 import { Check, ChevronRight, ExternalLink, FileText, X, Languages } from "lucide-react";
+// @ts-ignore
+import { getUnconfirmedRequiredSchemas } from "@/lib/pilot-ux/required-schemas.mjs";
 
 // UI text translations (simple NO/EN toggle, UI-only)
 const UI_TEXT = {
@@ -103,6 +105,10 @@ export function StartDayPhase() {
   const [startUIState, setStartUIState] = useState<'idle' | 'listening' | 'review'>('idle');
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
   const [isContinuing, setIsContinuing] = useState(false);
+  // Execution Sprint 3, Oppgave 1: continueFromPreDay() already blocks (motor.js:2245-2261)
+  // when a required schema is unconfirmed — but only alert()s in vanilla mode. This surfaces
+  // the same, real block in React mode instead of letting the button silently no-op.
+  const [continueBlockedMessage, setContinueBlockedMessage] = useState<string | null>(null);
   // Text input for start-idle (optional, passed to startDay if filled)
   const [startText, setStartText] = useState('');
 
@@ -144,6 +150,14 @@ export function StartDayPhase() {
     return dayLog.schemas.filter(s => s.origin === "pre_day");
   }, [dayLog?.schemas]);
 
+  // Clear the block message once the user resolves the required schema(s) it named.
+  useEffect(() => {
+    if (!continueBlockedMessage) return;
+    const stillUnconfirmed = getUnconfirmedRequiredSchemas(preDaySchemas, (type: string) => !!motor?.isSchemaRequired(type));
+    if (stillUnconfirmed.length === 0) setContinueBlockedMessage(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preDaySchemas]);
+
   // Check if any schemas are admin-required (via motor)
   const getSchemaStatus = (schema: Schema): "anbefalt" | "påkrevd" => {
     if (motor?.isSchemaRequired(schema.type)) {
@@ -152,9 +166,28 @@ export function StartDayPhase() {
     return "anbefalt";
   };
 
-  // Handle continue to drift — never blocked
+  // Helper for schema labels. The two NO/EN-translated short labels are a
+  // UI-language concern (kept); any other schema type's title comes from
+  // Runtime via motor — no hardcoded fallback list here. Hoisted to top-level
+  // scope (was local to the pre-day render branch) so handleContinue can use
+  // it too (Execution Sprint 3, Oppgave 1).
+  const getSchemaLabel = (schemaType: string): string => {
+    if (schemaType === "sja_preday") return t.sja_label;
+    if (schemaType === "kjoretoyssjekk") return t.vehicle_check_label;
+    return motor?.getSchemaFieldDefinitions(schemaType)?.label || schemaType;
+  };
+
+  // Handle continue to drift — blocks (and explains why) when a required schema is unconfirmed,
+  // matching motor.js's own continueFromPreDay() enforcement (Execution Sprint 3, Oppgave 1).
   const handleContinue = () => {
     if (isContinuing) return;
+    const unconfirmed = getUnconfirmedRequiredSchemas(preDaySchemas, (type: string) => !!motor?.isSchemaRequired(type));
+    if (unconfirmed.length > 0) {
+      const names = unconfirmed.map((s: { type: string }) => getSchemaLabel(s.type)).join(", ");
+      setContinueBlockedMessage(`Fullfør ${names} før du kan gå videre til drift.`);
+      return;
+    }
+    setContinueBlockedMessage(null);
     setIsContinuing(true);
     motor?.continueFromPreDay();
     // Safety: reset if motor rejected
@@ -304,15 +337,6 @@ export function StartDayPhase() {
 
   // --- Review state OR ACTIVE (pre): Show pre-day suggestions ---
   if (startUIState === 'review' || isPreDay) {
-    // Helper for schema labels. The two NO/EN-translated short labels are a
-    // UI-language concern (kept); any other schema type's title comes from
-    // Runtime via motor — no hardcoded fallback list here.
-    const getSchemaLabel = (schemaType: string): string => {
-      if (schemaType === "sja_preday") return t.sja_label;
-      if (schemaType === "kjoretoyssjekk") return t.vehicle_check_label;
-      return motor?.getSchemaFieldDefinitions(schemaType)?.label || schemaType;
-    };
-
     return (
       <div className="flex min-h-screen flex-col px-4 py-8 pb-24">
         {/* Language toggle - upper right corner */}
@@ -499,7 +523,12 @@ export function StartDayPhase() {
             ))}
           </div>
 
-          {/* Continue button — never disabled */}
+          {/* Continue button — blocked (with an explanation) only when a required schema is unconfirmed */}
+          {continueBlockedMessage && (
+            <p className="mb-2 text-center text-sm font-medium text-destructive">
+              {continueBlockedMessage}
+            </p>
+          )}
           <button
             onClick={handleContinue}
             disabled={isContinuing}
