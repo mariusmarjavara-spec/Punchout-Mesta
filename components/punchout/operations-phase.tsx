@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useMotorState, useMotor, Entry, type ParsedEntry } from "@/hooks/use-motor-state";
 import { VoiceButton } from "./voice-button";
 import { cn } from "@/lib/utils";
+// @ts-ignore
+import { describeLockReason } from "@/lib/pilot-ux/lock-reason.mjs";
 import {
   Clock,
   FileText,
@@ -55,6 +57,10 @@ export function OperationsPhase() {
   const [pendingReview, setPendingReview] = useState<{ text: string; type: string; parsed: ParsedEntry } | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [customTime, setCustomTime] = useState("");
+  // Execution Sprint 3, Oppgave 2: which locked entry's "why locked + correct" panel is open.
+  // UI-only view state, not a motor concept — the correction itself is a plain new entry
+  // submitted through motor.submitEntry(), never a mutation of the locked one.
+  const [correctingIndex, setCorrectingIndex] = useState<number | null>(null);
 
   // Get entries from motor (READ-ONLY)
   const entries = dayLog?.entries || [];
@@ -346,20 +352,26 @@ export function OperationsPhase() {
 
                 const isEditing = editingIndex === realIndex;
 
+                const lockReason = isLocked ? describeLockReason(entry) : null;
+                const isCorrecting = isLocked && correctingIndex === realIndex;
+
                 return (
                   <div
                     key={reverseIdx}
                     onClick={() => {
-                      if (!isEditing && !isLocked) {
-                        setEditText(entry.text);
-                        motor?.openEdit(realIndex);
+                      if (isEditing) return;
+                      if (isLocked) {
+                        setCorrectingIndex(correctingIndex === realIndex ? null : realIndex);
+                        return;
                       }
+                      setEditText(entry.text);
+                      motor?.openEdit(realIndex);
                     }}
                     className={cn(
-                      "rounded-xl border p-4 transition-all",
+                      "rounded-xl border p-4 transition-all cursor-pointer active:scale-[0.99]",
                       isLocked
                         ? "border-border bg-muted/30 opacity-70"
-                        : "border-border bg-card cursor-pointer active:scale-[0.99]",
+                        : "border-border bg-card",
                       isEditing && "border-primary bg-primary/5"
                     )}
                   >
@@ -377,14 +389,9 @@ export function OperationsPhase() {
                             isLocked ? "text-muted-foreground/60" : "text-muted-foreground"
                           )}>
                             {typeInfo.label}
-                            {isLocked && (
+                            {isLocked && lockReason && (
                               <span className="ml-1.5 text-xs text-muted-foreground/50">
-                                {entry.vaktloggConfirmed ? "Bekreftet" :
-                                 entry.vaktloggDiscarded ? "Forkastet" :
-                                 entry.ruhDecision === "yes" ? "RUH opprettet" :
-                                 entry.ruhDecision === "no" ? "Ikke RUH" :
-                                 entry.converted ? "Konvertert" :
-                                 entry.keptAsNote ? "Beholdt" : ""}
+                                {lockReason.short}
                               </span>
                             )}
                           </span>
@@ -427,6 +434,28 @@ export function OperationsPhase() {
                           )}>
                             {entry.text}
                           </p>
+                        )}
+                        {isCorrecting && lockReason && (
+                          <div
+                            className="mt-2 rounded-lg bg-muted/60 p-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <p className="text-xs text-muted-foreground">{lockReason.full}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Du kan ikke endre denne oppføringen, men du kan logge en rettelse som en ny oppføring.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInputText(`Rettelse til kl ${entry.time}: `);
+                                setSelectedType("notat");
+                                setCorrectingIndex(null);
+                              }}
+                              className="mt-2 flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                            >
+                              Logg rettelse
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

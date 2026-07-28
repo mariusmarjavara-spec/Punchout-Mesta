@@ -111,7 +111,8 @@ export function CompletionScreen() {
 
         {/* Info text */}
         <p className="max-w-xs text-sm text-muted-foreground">
-          Alle data er lagret og kan ikke endres. Kontakt leder hvis noe er feil.
+          Alle data er lagret og kan ikke endres i etterkant. Var noe feilregistrert? Trykk på
+          oppføringen i loggen for å legge til en rettelse — eller kontakt leder.
         </p>
 
         {/* Reset button */}
