@@ -9,6 +9,8 @@ import { StaleDayBanner } from "@/components/punchout/stale-day-banner";
 import { StorageErrorOverlay } from "@/components/punchout/storage-error-overlay";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
+// @ts-ignore
+import { initUxTelemetrySync } from "@/lib/telemetry/ux-events.mjs";
 
 export default function PunchoutApp() {
   // Mount guard — server and first client render must produce identical HTML.
@@ -32,6 +34,7 @@ export default function PunchoutApp() {
 
   useEffect(() => {
     setIsMounted(true);
+    initUxTelemetrySync();
   }, []);
 
   // Handle phase transitions (visual only)

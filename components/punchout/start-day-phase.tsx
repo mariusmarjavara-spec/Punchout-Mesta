@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { Check, ChevronRight, ExternalLink, FileText, X, Languages } from "lucide-react";
 // @ts-ignore
 import { getUnconfirmedRequiredSchemas } from "@/lib/pilot-ux/required-schemas.mjs";
+// @ts-ignore
+import { logUxEvent } from "@/lib/telemetry/ux-events.mjs";
 
 // UI text translations (simple NO/EN toggle, UI-only)
 const UI_TEXT = {
@@ -194,6 +196,7 @@ export function StartDayPhase() {
     if (unconfirmed.length > 0) {
       const names = unconfirmed.map((s: { type: string }) => getSchemaLabel(s.type)).join(", ");
       setContinueBlockedMessage(`Fullfør ${names} før du kan gå videre til drift.`);
+      logUxEvent("RequiredSchemaBlocked", { schemaTypes: unconfirmed.map((s: { type: string }) => s.type) });
       return;
     }
     setContinueBlockedMessage(null);
@@ -276,6 +279,7 @@ export function StartDayPhase() {
                   onClick={() => {
                     if (!isOnline) {
                       setVoiceBlockedByOffline(true);
+                      logUxEvent("VoiceBlockedOffline", { screen: "start_day_idle" });
                       return;
                     }
                     setVoiceBlockedByOffline(false);
@@ -329,6 +333,7 @@ export function StartDayPhase() {
               onClick={() => {
                 if (voiceState !== "listening" && !isOnline) {
                   setVoiceBlockedByOffline(true);
+                  logUxEvent("VoiceBlockedOffline", { screen: "start_day_listening" });
                   return;
                 }
                 setVoiceBlockedByOffline(false);

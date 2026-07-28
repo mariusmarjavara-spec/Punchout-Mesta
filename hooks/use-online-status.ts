@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+// @ts-ignore
+import { logUxEvent } from "@/lib/telemetry/ux-events.mjs";
 
 /**
  * Execution Sprint 3, Oppgave 3/4: the app has no online/offline awareness
@@ -16,8 +18,16 @@ export function useOnlineStatus(): boolean {
   );
 
   useEffect(() => {
-    const goOnline = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
+    // Execution Sprint 3, Oppgave 7: logged once per actual transition (not per render/tick),
+    // so "hvor ofte offline brukes" is answerable from timestamps without spamming events.
+    const goOnline = () => {
+      setIsOnline(true);
+      logUxEvent("OfflineStateObserved", { isOnline: true });
+    };
+    const goOffline = () => {
+      setIsOnline(false);
+      logUxEvent("OfflineStateObserved", { isOnline: false });
+    };
     window.addEventListener("online", goOnline);
     window.addEventListener("offline", goOffline);
     return () => {

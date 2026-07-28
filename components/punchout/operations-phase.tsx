@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { describeLockReason } from "@/lib/pilot-ux/lock-reason.mjs";
 // @ts-ignore
 import { deriveSyncStatus } from "@/lib/pilot-ux/sync-status.mjs";
+// @ts-ignore
+import { logUxEvent } from "@/lib/telemetry/ux-events.mjs";
 import {
   Clock,
   FileText,
@@ -115,6 +117,7 @@ export function OperationsPhase() {
   // Cancel mini-review (keep text in input)
   const handleCancelReview = () => {
     setPendingReview(null);
+    logUxEvent("ManualCancel", { context: "structured_entry_review" });
   };
 
   // Skip review and submit as raw entry
@@ -234,6 +237,7 @@ export function OperationsPhase() {
             onClick={() => {
               if (voiceState !== "listening" && !isOnline) {
                 setVoiceBlockedByOffline(true);
+                logUxEvent("VoiceBlockedOffline", { screen: "operations" });
                 return;
               }
               setVoiceBlockedByOffline(false);
@@ -465,7 +469,10 @@ export function OperationsPhase() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => motor?.cancelEdit()}
+                                onClick={() => {
+                                  motor?.cancelEdit();
+                                  logUxEvent("ManualCancel", { context: "entry_edit" });
+                                }}
                                 className="flex items-center gap-1 rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground"
                               >
                                 <X className="h-3 w-3" />
@@ -496,6 +503,7 @@ export function OperationsPhase() {
                                 setInputText(`Rettelse til kl ${entry.time}: `);
                                 setSelectedType("notat");
                                 setCorrectingIndex(null);
+                                logUxEvent("CorrectionAttempted", { originalEntryType: entry.type });
                               }}
                               className="mt-2 flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
                             >

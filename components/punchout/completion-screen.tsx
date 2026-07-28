@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMotorState, useMotor } from "@/hooks/use-motor-state";
 import { Check, RotateCcw, RefreshCw, FileText, Copy, Download, X, AlertCircle, Loader2 } from "lucide-react";
+// @ts-ignore
+import { logUxEvent } from "@/lib/telemetry/ux-events.mjs";
 
 /**
  * CompletionScreen - Shows after day is locked
@@ -24,6 +26,12 @@ export function CompletionScreen() {
   const [isResetting, setIsResetting] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Execution Sprint 3, Oppgave 7: logged once per transition into "failed", not on every
+  // re-render while the status stays failed.
+  useEffect(() => {
+    if (exportStatus === "failed") logUxEvent("ExportFailureShown", {});
+  }, [exportStatus]);
 
 
 
