@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useMotorState, useMotor, Entry, type ParsedEntry } from "@/hooks/use-motor-state";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 import { VoiceButton } from "./voice-button";
 import { cn } from "@/lib/utils";
 // @ts-ignore
 import { describeLockReason } from "@/lib/pilot-ux/lock-reason.mjs";
+// @ts-ignore
+import { deriveSyncStatus } from "@/lib/pilot-ux/sync-status.mjs";
 import {
   Clock,
   FileText,
@@ -17,6 +20,8 @@ import {
   ChevronDown,
   Check,
   X,
+  CloudOff,
+  RefreshCw,
 } from "lucide-react";
 
 /**
@@ -45,7 +50,12 @@ export function OperationsPhase() {
   const voiceError = useMotorState('voiceError');
   const voiceSupported = useMotorState('voiceSupported');
   const editingIndex = useMotorState('editingIndex');
+  const outboxStatus = useMotorState('outboxStatus');
   const motor = useMotor();
+  const isOnline = useOnlineStatus();
+  // Execution Sprint 3, Oppgave 3: outboxStatus was already live in MotorSnapshot but never
+  // rendered anywhere during active work — the report found this made sync entirely invisible.
+  const syncStatus = deriveSyncStatus(outboxStatus, isOnline);
 
   // UI-only state (not business logic)
   const [inputText, setInputText] = useState("");
@@ -133,6 +143,25 @@ export function OperationsPhase() {
               </p>
             </div>
           </div>
+          {syncStatus !== "synced" && (
+            <div
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                syncStatus === "sync_failed"
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {syncStatus === "sync_failed" ? (
+                <AlertCircle className="h-3.5 w-3.5" />
+              ) : syncStatus === "offline_pending" ? (
+                <CloudOff className="h-3.5 w-3.5" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              {syncStatus === "sync_failed" ? "Synkfeil" : syncStatus === "offline_pending" ? "Lagret lokalt" : "Synkroniserer…"}
+            </div>
+          )}
         </div>
       </header>
 
