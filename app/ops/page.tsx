@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+// @ts-ignore
+import { buildAdminAuthHeader } from "@/lib/pilot-ux/ops-auth-header.mjs";
 
 /**
  * Validation Sprint Del 7 finding: Operations Center existed only as a
@@ -15,7 +17,22 @@ import { useState } from "react";
  * an internal operator tool for a small pilot, not a polished product
  * surface — building more than this now would be exactly the kind of
  * new-feature scope this phase explicitly excludes.
+ *
+ * Hotfix Sprint, Hotfix 2 — root cause: Execution Sprint 4 correctly
+ * added verifyAdminAuth() to /api/operations-center (it had none, a real
+ * vulnerability), but this page's fetch() never sent an Authorization
+ * header — it had no token input at all, because none was needed before
+ * that fix. The fix was correct on the API side and broke the only
+ * legitimate consumer of that API. This adds ONLY a client-side token
+ * field so the already-correct server-side check has something to
+ * verify — verifyAdminAuth()/lib/backend/auth.mjs is untouched, no
+ * authentication logic is weakened or bypassed anywhere.
+ *
+ * Token is kept in sessionStorage (cleared when the tab closes), never
+ * localStorage — an admin bearer token has no reason to outlive the
+ * session it was typed into.
  */
+const TOKEN_STORAGE_KEY = "punchout_ops_admin_token";
 
 type OpsData = {
   organizationId: string;
@@ -40,17 +57,35 @@ function pct(v: number | null): string {
 
 export default function OpsPage() {
   const [org, setOrg] = useState("");
+  const [token, setToken] = useState("");
   const [data, setData] = useState<OpsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Restore a previously-entered token for this tab session only (sessionStorage, not localStorage).
+  useEffect(() => {
+    const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (saved) setToken(saved);
+  }, []);
+
+  function updateToken(value: string) {
+    setToken(value);
+    if (value) sessionStorage.setItem(TOKEN_STORAGE_KEY, value);
+    else sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+  }
 
   async function load() {
     if (!org.trim()) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/operations-center?org=" + encodeURIComponent(org.trim()));
-      if (!res.ok) {
+      const res = await fetch("/api/operations-center?org=" + encodeURIComponent(org.trim()), {
+        headers: buildAdminAuthHeader(token),
+      });
+      if (res.status === 401) {
+        setError("Ikke autentisert — admin-token mangler eller er ugyldig.");
+        setData(null);
+      } else if (!res.ok) {
         setError("Feil " + res.status + " fra API");
         setData(null);
       } else {
@@ -75,6 +110,15 @@ export default function OpsPage() {
           value={org}
           onChange={(e) => setOrg(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
+        />
+        <input
+          className="border rounded px-3 py-2 flex-1"
+          type="password"
+          placeholder="Admin-token (PUNCHOUT_ADMIN_TOKEN)"
+          value={token}
+          onChange={(e) => updateToken(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && load()}
+          autoComplete="off"
         />
         <button className="border rounded px-4 py-2 bg-neutral-900 text-white" onClick={load} disabled={loading}>
           {loading ? "Laster…" : "Hent"}
