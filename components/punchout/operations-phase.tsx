@@ -120,8 +120,16 @@ export function OperationsPhase() {
   };
 
   // Confirm structured entry from mini-review
+  // UX & Stability Hardening Review: motor.confirmStructuredEntry() unconditionally pushes a
+  // new dayLog entry on every call (public/motor.js:4563+, verified) — same non-idempotent
+  // shape as the plain submitEntry() path Hotfix 4 already guarded. This handler had no
+  // isSubmitting guard, so two rapid taps on "Bekreft" before React removes the mini-review
+  // card could log the same ordre-line twice. Reuses the exact isSubmitting state/timing
+  // already declared above for handleSubmitEntry — no new pattern introduced.
   const handleConfirmReview = () => {
-    if (!pendingReview) return;
+    if (!pendingReview || !shouldAllowSubmit(isSubmitting, pendingReview.text)) return;
+    setIsSubmitting(true);
+    setTimeout(() => setIsSubmitting(false), 500);
     motor?.confirmStructuredEntry(pendingReview.text, pendingReview.type, pendingReview.parsed);
     setPendingReview(null);
     clearInputDraft();
@@ -133,9 +141,11 @@ export function OperationsPhase() {
     logUxEvent("ManualCancel", { context: "structured_entry_review" });
   };
 
-  // Skip review and submit as raw entry
+  // Skip review and submit as raw entry — same double-submit gap and fix as handleConfirmReview.
   const handleSubmitRaw = () => {
-    if (!pendingReview) return;
+    if (!pendingReview || !shouldAllowSubmit(isSubmitting, pendingReview.text)) return;
+    setIsSubmitting(true);
+    setTimeout(() => setIsSubmitting(false), 500);
     motor?.submitEntry(pendingReview.text, pendingReview.type);
     setPendingReview(null);
     clearInputDraft();
@@ -362,16 +372,18 @@ export function OperationsPhase() {
               <div className="flex gap-2">
                 <button
                   onClick={handleConfirmReview}
+                  disabled={isSubmitting}
                   type="button"
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-all active:scale-[0.98]"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   <Check className="h-4 w-4" />
                   Bekreft
                 </button>
                 <button
                   onClick={handleSubmitRaw}
+                  disabled={isSubmitting}
                   type="button"
-                  className="rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground transition-all active:scale-[0.98]"
+                  className="rounded-lg bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground transition-all active:scale-[0.98] disabled:opacity-50"
                 >
                   Bare logg
                 </button>
