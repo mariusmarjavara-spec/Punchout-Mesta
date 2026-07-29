@@ -1,0 +1,13 @@
+[
+  {
+    "scenario": "Spoken location does not textually match the order id covering it",
+    "category": "order",
+    "originalValue": "Fjellveien",
+    "knownValues": ["GV-2026-0001", "GV-2026-0002"],
+    "correctionRepeats": 3,
+    "correctedValue": "GV-2026-0002",
+    "expectedTopBeforeCorrection": "GV-2026-0001",
+    "expectedTopAfterCorrection": "GV-2026-0002",
+    "todaysConfirmedValue": "GV-2026-0001"
+  }
+]

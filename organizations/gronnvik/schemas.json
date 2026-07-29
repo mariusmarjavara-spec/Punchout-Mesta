@@ -1,0 +1,39 @@
+[
+  {
+    "schemaType": "sja_preday",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "pre_day",
+    "title": "SJA (før arbeid)",
+    "triggers": ["sja"],
+    "fields": {
+      "oppgave": { "label": "Oppgave", "type": "text", "required": true, "helpText": "Hva skal gjøres i dag" },
+      "sted": { "label": "Sted", "type": "text", "required": false },
+      "godkjent": { "label": "Godkjent", "type": "boolean", "required": true }
+    }
+  },
+  {
+    "schemaType": "kjoretoyssjekk",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "pre_day",
+    "title": "Kjøretøysjekk",
+    "triggers": ["kjøretøysjekk", "kjoretoysjekk"],
+    "fields": {
+      "kjoretoy": { "label": "Kjøretøy", "type": "text", "required": true },
+      "skader_observert": { "label": "Skader observert", "type": "boolean", "required": false }
+    }
+  },
+  {
+    "schemaType": "hendelsesrapport",
+    "version": 1,
+    "effectiveFrom": "2026-01-01",
+    "origin": "drift",
+    "title": "Hendelsesrapport",
+    "fields": {
+      "beskrivelse": { "label": "Beskrivelse", "type": "text", "required": false },
+      "arsak": { "label": "Årsak", "type": "text", "required": true, "autofillable": false },
+      "tiltak": { "label": "Tiltak", "type": "text", "required": true, "autofillable": false }
+    }
+  }
+]

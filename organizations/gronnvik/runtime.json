@@ -1,0 +1,75 @@
+{
+  "organizationId": "gronnvik",
+  "name": "Grønnvik Entreprenør AS",
+  "orders": [
+    { "id": "GV-2026-0001", "description": "Gressklipping Grønnvik sentrum", "active": true },
+    { "id": "GV-2026-0002", "description": "Snørydding Fjellveien", "active": true }
+  ],
+  "machines": [
+    { "id": "m1", "type": "gressklipper", "label": "Gressklipper GK-2" },
+    { "id": "m2", "type": "broytebil", "label": "Brøytebil BB-9" }
+  ],
+  "vehicles": [],
+  "wageCodes": [
+    { "kode": "100", "label": "Ordinær arbeidstid" },
+    { "kode": "200", "label": "Overtid 50%" }
+  ],
+  "procedures": [],
+  "externalLinks": [
+    { "id": "kommuneportal", "title": "Logg inn i Kommuneportalen", "url": "https://kommuneportal.example.no/login" }
+  ],
+  "sjaDefaults": null,
+  "rules": [
+    {
+      "id": "rule_hendelsesrapport_on_incident",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "incidentReported" },
+      "conditions": [{ "field": "incidentReported", "operator": "equals", "value": true }],
+      "action": { "type": "requireSchema", "target": "hendelsesrapport" },
+      "priority": 100,
+      "affects": { "schemaTypes": ["hendelsesrapport"] }
+    },
+    {
+      "id": "rule_required_schema_from_machine",
+      "version": 1,
+      "effectiveFrom": "2026-01-01",
+      "trigger": { "event": "factObserved", "factKey": "requiredSchemaFromMachine" },
+      "conditions": [],
+      "action": { "type": "requireSchema", "target": "$factValue" },
+      "priority": 80,
+      "affects": {}
+    }
+  ],
+  "capabilityProviders": [
+    { "id": "internal_schema_registry", "kind": "schema" }
+  ],
+  "capabilityBindings": [
+    { "capability": "sja_preday", "providerId": "internal_schema_registry", "config": { "schemaType": "sja_preday" } },
+    { "capability": "kjoretoyssjekk", "providerId": "internal_schema_registry", "config": { "schemaType": "kjoretoyssjekk" } },
+    { "capability": "hendelsesrapport", "providerId": "internal_schema_registry", "config": { "schemaType": "hendelsesrapport" } }
+  ],
+  "rankingWeights": {
+    "maxAliasBonus": 15,
+    "maxOrganizationBonus": 5,
+    "maxRecencyBonus": 5,
+    "recencyPerOccurrence": 2,
+    "correctionBonusThresholds": [
+      { "minCount": 1, "bonus": 3 },
+      { "minCount": 3, "bonus": 9 },
+      { "minCount": 6, "bonus": 16 },
+      { "minCount": 12, "bonus": 20 }
+    ]
+  },
+  "capabilityKindExpectations": {
+    "sja_preday": "schema",
+    "kjoretoyssjekk": "schema",
+    "hendelsesrapport": "schema"
+  },
+  "extractionPatterns": {
+    "ordre": "\\b(GV-\\d{4}-\\d{4})\\b"
+  },
+  "extractionVocabularies": {
+    "incidentKeywords": ["avvik", "skade", "uhell"]
+  }
+}

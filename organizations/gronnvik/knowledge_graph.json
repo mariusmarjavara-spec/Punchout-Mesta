@@ -1,0 +1,13 @@
+{
+  "activities": [
+    { "id": "gressklipping", "label": "Gressklipping", "machineTypes": ["gressklipper"], "keywords": ["klipt", "klipper", "gressklipping"] },
+    { "id": "snorydding", "label": "Snørydding", "machineTypes": ["broytebil"], "keywords": ["brøytet", "brøyter", "snørydding"] }
+  ],
+  "machineTypes": [
+    { "id": "gressklipper", "label": "Gressklipper GK-2", "requiredSchemas": ["kjoretoyssjekk"], "recommendedSchemas": [], "externalSystems": [] },
+    { "id": "broytebil", "label": "Brøytebil BB-9", "requiredSchemas": ["kjoretoyssjekk"], "recommendedSchemas": [], "externalSystems": [] }
+  ],
+  "orderTypes": [
+    { "id": "kommunalt_vedlikehold", "label": "Kommunalt vedlikehold", "activities": ["gressklipping", "snorydding"] }
+  ]
+}
