@@ -3187,7 +3187,12 @@ function orchestrateEntry(text) {
   };
 
   // Extract ordre number: patterns like "204481-0014", "ordre 1234-5"
-  var ordreMatch = text.match(/\b(\d{4,}-\d{1,4})\b/);
+  // RC1-01 fix: was a second, hardcoded (Mesta-shaped) copy of the same pattern
+  // COMPLETION_ORDRE_PATTERN (below, :5746) already builds from the organization's own
+  // Runtime.extractionPatterns.ordre — two sources of truth for the same fact, only one of
+  // them organization-aware. This live "Bekreft ordrelinje" preview now reads the same,
+  // single authoritative pattern the Completion Engine already uses, instead of its own copy.
+  var ordreMatch = text.match(COMPLETION_ORDRE_PATTERN);
   if (ordreMatch) result.ordre = ordreMatch[1];
 
   // Extract time range: "fra 08.30 til 14.00", "08:30 - 14:00", "08.30-14.00"
