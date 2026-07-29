@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useMotorState, useMotor, Entry, type ParsedEntry } from "@/hooks/use-motor-state";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useDraftText } from "@/hooks/use-draft-text";
+// @ts-ignore
+import { shouldAllowSubmit } from "@/lib/pilot-ux/submit-guard.mjs";
 import { VoiceButton } from "./voice-button";
 import { cn } from "@/lib/utils";
 // @ts-ignore
@@ -68,6 +70,11 @@ export function OperationsPhase() {
   const [selectedType, setSelectedType] = useState<string>("notat");
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  // Hotfix Sprint, Hotfix 4: same in-flight guard pattern already used by handleEndDay/
+  // handleContinue/handleLock (isEnding/isContinuing/isLocking) — handleSubmitEntry had none,
+  // so two rapid taps on "Logg" before React re-renders (clearing inputText) could both call
+  // motor.submitEntry() with the same text, creating a duplicate entry. Reused, not reinvented.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmingEndDay, setConfirmingEndDay] = useState(false);
   const [editText, setEditText] = useState("");
   const [pendingReview, setPendingReview] = useState<{ text: string; type: string; parsed: ParsedEntry } | null>(null);
@@ -94,7 +101,9 @@ export function OperationsPhase() {
 
   // Handle submit: parse first, show mini-review if structured
   const handleSubmitEntry = () => {
-    if (!inputText.trim()) return;
+    if (!shouldAllowSubmit(isSubmitting, inputText)) return;
+    setIsSubmitting(true);
+    setTimeout(() => setIsSubmitting(false), 500);
     const text = inputText.trim();
 
     // Try structured parse
@@ -313,7 +322,7 @@ export function OperationsPhase() {
             {/* Submit button */}
             <button
               onClick={handleSubmitEntry}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || isSubmitting}
               type="button"
               className="rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
