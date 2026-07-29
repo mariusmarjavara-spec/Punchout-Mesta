@@ -7,6 +7,8 @@ import { HandrensPhase } from "@/components/punchout/handrens-phase";
 import { CompletionScreen } from "@/components/punchout/completion-screen";
 import { StaleDayBanner } from "@/components/punchout/stale-day-banner";
 import { StorageErrorOverlay } from "@/components/punchout/storage-error-overlay";
+import { CrossTabConflictBanner } from "@/components/punchout/cross-tab-conflict-banner";
+import { useCrossTabConflict } from "@/hooks/use-cross-tab-conflict";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 // @ts-ignore
@@ -24,6 +26,7 @@ export default function PunchoutApp() {
   const storageError = useMotorState('storageError');
   const isStaleDay = useMotorState('isStaleDay');
   const motor = useMotor();
+  const { conflictDetected, dismiss: dismissConflict } = useCrossTabConflict();
 
   // Derive current phase from motor state
   const currentPhase = derivePhase(appState, dayLog);
@@ -80,6 +83,11 @@ export default function PunchoutApp() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Cross-tab/device conflict banner (Hotfix Sprint, Hotfix 1) — non-blocking, shown at top */}
+      {conflictDetected && (
+        <CrossTabConflictBanner onDismiss={dismissConflict} />
+      )}
+
       {/* Stale day banner (non-blocking, shown at top) */}
       {isStaleDay && dayLog && (
         <StaleDayBanner date={dayLog.date} motor={motor} />
