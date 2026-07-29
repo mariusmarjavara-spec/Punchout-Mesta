@@ -39,13 +39,42 @@ kjeden (eksport, Runtime, telemetri) fungerer mot den faktiske, kjørende instan
 
 ## 2. Onboarde en ny organisasjon
 
-Denne pipelinen finnes og fungerer i dag, men var **udokumentert** før denne sprinten — teknisk
-mulig via API siden Phase A, aldri skrevet ned som en prosedyre. **✅ Faktisk kjørt og bekreftet
-denne sprinten** (mot `mesta`, som en del av Oppgave 4s backup-øvelse):
+Denne pipelinen finnes og fungerer i dag, men var **udokumentert** før Sprint 4/Oppgave 7 — teknisk
+mulig via API siden Phase A, aldri skrevet ned som en prosedyre. **✅ Faktisk kjørt og bekreftet**
+(mot `mesta`, og senere fra bunnen mot en helt ny organisasjon, `gronnvik`, i RC1/den fulle
+End-to-End Acceptance Test).
+
+> **⚠️ Viktig, funnet under RC1 (F4/F5): denne prosedyren fungerer KUN mot `next start`/`next dev`
+> kjørt direkte fra kildekoden — IKKE mot en Docker/Fly.io-deployert instans uten et ekstra steg.**
+>
+> `.next/standalone/organizations/` er et **byggetids-øyeblikksbilde** — Next.js' file tracing
+> kopierer `organizations/`-mappen inn i `.next/standalone` ved `next build`, ikke ved
+> kjøretid (`lib/organization-package/loader.mjs` leser org-pakker med `fs.readFileSync`, en
+> dynamisk fil-lesing Next.js sin bundler ikke kan spore inn avhengigheter fra på forhånd, så
+> tracing tar med hele mappen som den så ut ved siste bygg). Bekreftet direkte: å legge en ny
+> org-pakke i kildekoden og kalle `/api/runtime/compile` mot en `.next/standalone`-server bygget
+> *før* pakken ble lagt til, feiler med `"missing required file runtime.json"` — selv om filen
+> fysisk finnes i `organizations/<slug>/` i kildekoden. Etter en ny `next build` (steg 1
+> over, pluss et nytt `docker build`/`fly deploy` i produksjon), fungerer prosedyren under
+> nøyaktig som beskrevet.
+>
+> **Derfor, ved en Docker/Fly.io-deployert instans**: legg til org-pakken i kildekoden (steg 1
+> under), **bygg og redeploy applikasjonen på nytt (§1) FØR** du kaller `/api/runtime/compile` —
+> ikke bare `git push`/lagre filene og forvente at en kjørende produksjonsinstans plukker dem opp.
+> Dette er ikke en databaseendring (ingen `PUNCHOUT_DATA_DIR`-tilstand berøres), men det er heller
+> ikke en ren kjøretidsoperasjon slik teksten under isolert sett kan lese som.
+>
+> Vurdert og bevisst IKKE løst ved å endre deploy-flyten i stedet (f.eks. montere
+> `organizations/` som et eksternt volum, slik `PUNCHOUT_DATA_DIR` allerede er): det ville krevd
+> å endre `next.config.mjs`s fil-sporing, `Dockerfile`, og `fly.toml` samtidig — reell
+> infrastrukturrisiko som ikke kan verifiseres uten en ekte Fly.io-konto, for å løse noe en
+> ren dokumentasjonspresisering løser like godt med null kjøretidsrisiko. Se
+> `docs/end-to-end-acceptance-test.md` (RC1-03) for den fulle avveiningen.
 
 ```bash
 # 1. Legg org-pakken i organizations/<slug>/ (knowledge_graph.json, schemas.json, prompts.json,
 #    aliases.json, validation.json, corrections.json — se en eksisterende org-mappe som mal).
+#    Ved Docker/Fly.io: bygg og redeploy applikasjonen (§1) FØR du fortsetter til steg 2 under.
 
 # 2. Kompiler og valider (rører ingenting live ennå):
 curl -X POST $URL/api/runtime/compile \
