@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useMotorState, useMotor, Entry, type ParsedEntry } from "@/hooks/use-motor-state";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { useDraftText } from "@/hooks/use-draft-text";
 import { VoiceButton } from "./voice-button";
 import { cn } from "@/lib/utils";
 // @ts-ignore
@@ -60,7 +61,10 @@ export function OperationsPhase() {
   const syncStatus = deriveSyncStatus(outboxStatus, isOnline);
 
   // UI-only state (not business logic)
-  const [inputText, setInputText] = useState("");
+  // Hotfix Sprint, Hotfix 3: draft-autosaved (debounced, separate localStorage key from the
+  // DayLog motor.js persists) so a refresh/crash/accidental tab close doesn't silently discard
+  // typed-but-unsubmitted text — see hooks/use-draft-text.ts for the full root-cause writeup.
+  const [inputText, setInputText, clearInputDraft] = useDraftText("punchout_draft_input");
   const [selectedType, setSelectedType] = useState<string>("notat");
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
@@ -103,7 +107,7 @@ export function OperationsPhase() {
 
     // No structure — raw submit
     motor?.submitEntry(text, selectedType);
-    setInputText("");
+    clearInputDraft();
   };
 
   // Confirm structured entry from mini-review
@@ -111,7 +115,7 @@ export function OperationsPhase() {
     if (!pendingReview) return;
     motor?.confirmStructuredEntry(pendingReview.text, pendingReview.type, pendingReview.parsed);
     setPendingReview(null);
-    setInputText("");
+    clearInputDraft();
   };
 
   // Cancel mini-review (keep text in input)
@@ -125,7 +129,7 @@ export function OperationsPhase() {
     if (!pendingReview) return;
     motor?.submitEntry(pendingReview.text, pendingReview.type);
     setPendingReview(null);
-    setInputText("");
+    clearInputDraft();
   };
 
   // Handle end day via motor
