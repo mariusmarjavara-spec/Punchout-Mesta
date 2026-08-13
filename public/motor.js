@@ -2005,6 +2005,11 @@ function saveEdit(index, newText) {
     var text = (newText || "").trim();
     if (text) {
       dayLog.entries[i].text = text;
+      // See updateDraftFromOrchestration's F2 comment: editing an entry's text
+      // after submission is the one path that changes what a draft's linked
+      // entries say without going through orchestration, so it needs its own
+      // rebuild to keep arbeidsbeskrivelse from going stale.
+      updateDraftDescriptions();
       saveCurrentDay();
     }
     editingIndex = -1;
@@ -2018,6 +2023,7 @@ function saveEdit(index, newText) {
   if (domText) {
     dayLog.entries[editingIndex].type = newType;
     dayLog.entries[editingIndex].text = domText;
+    updateDraftDescriptions();
     saveCurrentDay();
   }
   cancelEdit();
@@ -3290,6 +3296,19 @@ function updateDraftFromOrchestration(orch, entryIndex) {
   if (draft.entryIndices.indexOf(entryIndex) === -1) {
     draft.entryIndices.push(entryIndex);
   }
+
+  // Operation Punchout Soft Launch finding (docs/end-to-end-acceptance-test.md
+  // F2): arbeidsbeskrivelse was only ever rebuilt by updateDraftDescriptions(),
+  // which was only ever called from vanilla-mode-only DOM overlay functions
+  // (showDraftDecisionOverlay/showDraftViewOverlay). REACT_MODE's endDay() never
+  // reaches those (it hands off to the React "Håndrens" UI instead), so in
+  // production every confirmed draft's arbeidsbeskrivelse stayed permanently
+  // empty -- reproduced directly: a real submitted, linked, confirmed draft
+  // still exported arbeidsbeskrivelse: []. Rebuilding it here, at the one call
+  // site every entry submission unconditionally passes through in both modes,
+  // makes it correct at the moment of submission instead of depending on a
+  // vanilla-only render side effect that React mode never triggers.
+  updateDraftDescriptions();
 
   saveCurrentDay();
 }
