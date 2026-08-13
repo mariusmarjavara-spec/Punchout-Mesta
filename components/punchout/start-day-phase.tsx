@@ -615,6 +615,31 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
   // Motor receives debounced updates via setSchemaField.
   const [editState, setEditState] = useState<Record<string, unknown>>(() => ({...(schema?.fields ?? {})}));
 
+  // Dogfooding Punchout audit finding: `pendingFieldRef` and the
+  // flush-on-unmount effect below used to sit AFTER the `if (!schema)
+  // return null;` guard — a real Rules-of-Hooks violation (react-hooks/
+  // rules-of-hooks), since these two hooks were then skipped entirely on
+  // any render where `schema` was undefined, desyncing React's hook call
+  // order across renders of the same component instance. Moved both
+  // above the early return; the effect's own cleanup now guards `schema`
+  // being possibly undefined internally instead of via a conditional hook.
+  const pendingFieldRef = useRef<{ key: string; value: unknown } | null>(null);
+
+  // Flush a pending debounced write on unmount instead of letting it fire
+  // late (e.g. after "Lagre"/"Avbryt" already closed the overlay, or after
+  // the day was locked) or dropping the last keystroke silently.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        if (pendingFieldRef.current && schema) {
+          motor.setSchemaField(schema.id, pendingFieldRef.current.key, pendingFieldRef.current.value);
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!schema) return null;
 
   const fieldDefinitions = motor.getSchemaFieldDefinitions(schema.type, schema.origin);
@@ -629,8 +654,6 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
   const isHandrens = dayLog.phase === "ending";
   const saveLabel = isHandrens ? "Lagre" : "Lagre og bekreft";
 
-  const pendingFieldRef = useRef<{ key: string; value: unknown } | null>(null);
-
   const handleFieldChange = (key: string, value: unknown) => {
     // Update local state immediately for responsive UI
     setEditState(prev => ({ ...prev, [key]: value }));
@@ -642,21 +665,6 @@ export function SchemaEditOverlay({ dayLog, uxState, motor }: SchemaEditOverlayP
       pendingFieldRef.current = null;
     }, 250);
   };
-
-  // Flush a pending debounced write on unmount instead of letting it fire
-  // late (e.g. after "Lagre"/"Avbryt" already closed the overlay, or after
-  // the day was locked) or dropping the last keystroke silently.
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        if (pendingFieldRef.current) {
-          motor.setSchemaField(schema.id, pendingFieldRef.current.key, pendingFieldRef.current.value);
-        }
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
