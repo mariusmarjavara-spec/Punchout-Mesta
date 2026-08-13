@@ -1,6 +1,8 @@
 # Browser Readiness Protocol (Oppgave 7)
 
-**Status: forberedt, ikke utført.** Dette miljøet har ingen nettleser-automatiseringsverktøy (bekreftet via verktøysøk før noe testarbeid startet i denne sprinten). Denne protokollen er skrevet slik at et menneske kan kjøre den manuelt, senere, uten å måtte finne opp testsekvensen selv.
+**Oppdatering, Operation Punchout Soft Launch, Phase B**: et ekte Chromium-miljø (Playwright) viste seg å faktisk være tilgjengelig i en senere økt, i motsetning til hva tidligere rapporter fant — brukt til å kjøre steg 1-8 under (kald lasting, start dag, registrering, steg 4s skjema-lagring, håndrens, lås dag, eksport) reelt, mot en ekte kjørende server OG mot det ekte Docker-produksjonsbygget. Fant og fikset to reelle, tidligere uoppdagbare feil i samme økt (se `docs/deploy-runbook.md` og git-historikk: en `@vercel/analytics`-404 på hver eneste sideinnlasting, og en alvorlig modul-grense-feil som stille brakk Runtime-levering for den aller første besøkende på enhver ekte utrulling). Permanent, automatisert versjon: `lib/regression/browser-verification.mjs`, kjørt i CI.
+
+**Gjenstår ekte, ikke dekket av automatiseringen over**: Chrome/Edge/Firefox spesifikt (automatiseringen bruker kun Chromium — ett motor-engine, ikke de tre protokollen selv krever), ekte nettverksforhold, ekte fysisk tastatur/fokus-oppførsel, visuell/layout-gjennomgang. Steg 9-10 under (refresh midt i skjema, lås-etter-refresh) er ikke automatisert ennå. **Status for DISSE gjenstående delene: fortsatt forberedt, ikke utført.**
 
 ## Forutsetning før kjøring
 

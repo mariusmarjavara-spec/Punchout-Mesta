@@ -55,6 +55,24 @@ jobs:
       - name: Runtime provisioning (real device -> real per-org Runtime, live HTTP)
         run: node lib/regression/runtime-provisioning.mjs
 
+      # Operation Punchout Soft Launch, Phase B: this mission's own First
+      # Principle is "a simulated integration is not an integrated product" —
+      # every prior report in this engagement documented real browser
+      # verification as "prepared, not executed," since no browser automation
+      # tool was ever available. This session found one was available after
+      # all and used it to catch two real production bugs (a @vercel/analytics
+      # 404 on every real page load, and a module-boundary bug that silently
+      # broke Runtime delivery for the first real visitor to any deployment,
+      # forever) in a single pass — neither reachable by any other check in
+      # this file. Chromium is installed explicitly here rather than bundled
+      # as a project dependency, to avoid forcing the download on every
+      # contributor's local `npm install`.
+      - name: Install Chromium for browser verification
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser verification (real Chromium, full workday, live server)
+        run: node lib/regression/browser-verification.mjs
+
       # Execution Sprint 4, Oppgave 1/6: `next build` was never run in CI before
       # this — the only way anyone would have discovered a build break was a
       # human running it manually. Placed after the fast logic/regression
