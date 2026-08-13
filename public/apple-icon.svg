@@ -1,0 +1,21 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Apple touch icon: solid background required (no transparency), iOS
+       rounds the corners itself so this stays a plain square underneath. -->
+  <rect width="180" height="180" fill="#1F2933" />
+  <g stroke="#FFFFFF" stroke-width="5" fill="none">
+    <rect x="30" y="30" width="90" height="90" rx="5" stroke-width="6" />
+    <line x1="52.5" y1="30" x2="52.5" y2="120" />
+    <line x1="75" y1="30" x2="75" y2="120" />
+    <line x1="97.5" y1="30" x2="97.5" y2="120" />
+    <line x1="30" y1="52.5" x2="120" y2="52.5" />
+    <line x1="30" y1="75" x2="120" y2="75" />
+    <line x1="30" y1="97.5" x2="120" y2="97.5" />
+  </g>
+  <g fill="#FFFFFF">
+    <polygon points="134,58 156,50 143,68" />
+    <polygon points="146,74 164,71 152,88" />
+    <polygon points="131,42 148,32 138,52" />
+  </g>
+  <path d="M46 95 L75 122 L146 55"
+        stroke="#FF6A00" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>
