@@ -159,7 +159,7 @@ export function StartDayPhase() {
   const preDaySchemas = useMemo(() => {
     if (!dayLog?.schemas) return [];
     return dayLog.schemas.filter(s => s.origin === "pre_day");
-  }, [dayLog?.schemas]);
+  }, [dayLog]);
 
   // Clear the block message once the user resolves the required schema(s) it named.
   useEffect(() => {
