@@ -1,10 +1,11 @@
 # docs/ index
 
-16 reports accumulated across this engagement, in roughly chronological order within each group. None are rewritten after the fact — each is a snapshot of what was true and verified *at the time it was written*. Where a later pass superseded an earlier finding, the later doc says so explicitly; this index doesn't try to re-adjudicate that here. For the actual current state of the codebase, prefer `git log` and the code itself over any single report below.
+18 reports accumulated across this engagement, in roughly chronological order within each group. None are rewritten after the fact — each is a snapshot of what was true and verified *at the time it was written*. Where a later pass superseded an earlier finding, the later doc says so explicitly; this index doesn't try to re-adjudicate that here. For the actual current state of the codebase, prefer `git log` and the code itself over any single report below.
 
 ## Start here
 
-- **[deploy-runbook.md](deploy-runbook.md)** — how to actually deploy, onboard a new organization, and provision a device. The one doc most likely to be what you're looking for.
+- **[SOFT_LAUNCH_READINESS.md](SOFT_LAUNCH_READINESS.md)** — the current, authoritative readiness verdict (🟡 READY FOR LIMITED SOFT LAUNCH WITH KNOWN CONSTRAINTS), evidence matrix, and the two remaining external actions. Read this first.
+- **[deploy-runbook.md](deploy-runbook.md)** — how to actually deploy, onboard a new organization, and provision a device.
 - **[pilot-operations.md](pilot-operations.md)** — daily ops checklist, incident response, backup/restore procedure.
 - **[deployment-decision.md](deployment-decision.md)** — why Fly.io/Railway over Vercel (persistent-filesystem requirement), and what's actually been proven vs. still needs a real account.
 

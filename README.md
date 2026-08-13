@@ -50,6 +50,7 @@ The fast suite above is intentionally not the whole picture — several checks r
 
 ## Where to look next
 
+- [docs/SOFT_LAUNCH_READINESS.md](docs/SOFT_LAUNCH_READINESS.md) — current readiness verdict and evidence matrix.
 - [docs/](docs/) — the full engineering history: readiness reports, protocols, sprint reports. See [docs/README.md](docs/README.md) for an index.
 - [docs/deploy-runbook.md](docs/deploy-runbook.md) — how to actually deploy, onboard a new organization, and provision a device.
 - [docs/pilot-operations.md](docs/pilot-operations.md) — daily ops checklist, incident response, backup.
