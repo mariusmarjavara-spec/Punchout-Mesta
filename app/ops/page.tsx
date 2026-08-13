@@ -105,14 +105,14 @@ export default function OpsPage() {
 
       <div className="flex gap-2 mb-6">
         <input
-          className="border rounded px-3 py-2 flex-1"
+          className="min-w-0 border rounded px-3 py-2 flex-1"
           placeholder="organizationId (f.eks. mesta)"
           value={org}
           onChange={(e) => setOrg(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
         <input
-          className="border rounded px-3 py-2 flex-1"
+          className="min-w-0 border rounded px-3 py-2 flex-1"
           type="password"
           placeholder="Admin-token (PUNCHOUT_ADMIN_TOKEN)"
           value={token}
