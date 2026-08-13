@@ -5780,6 +5780,33 @@ function initTelemetrySync() {
   if (typeof window !== "undefined" && window.addEventListener) {
     window.addEventListener("online", function () { flushTelemetry(); });
   }
+  // Operation Punchout Soft Launch backlog item (post-sprint-3-strategic-review.md
+  // Oppgave 3, "Viktig"): a real crash in the field was invisible unless the
+  // worker actively reported it -- confirmed by grepping for window.onerror,
+  // zero hits anywhere in this codebase's history. Registered here (motor.js
+  // loads before the React UI) so it catches uncaught errors and unhandled
+  // promise rejections from anywhere in the app, not just motor.js itself.
+  // Uses the same emitTelemetry()/flushTelemetry() side-channel every other
+  // telemetry event already uses -- never blocks or affects the workday
+  // itself, same posture as the rest of telemetry.
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("error", function (event) {
+      emitTelemetry("ClientError", {
+        message: String(event.message || "unknown error"),
+        source: event.filename || null,
+        line: event.lineno || null,
+        stack: (event.error && event.error.stack) ? String(event.error.stack).slice(0, 2000) : null
+      });
+    });
+    window.addEventListener("unhandledrejection", function (event) {
+      emitTelemetry("ClientError", {
+        message: "Unhandled promise rejection: " + String(event.reason && event.reason.message ? event.reason.message : event.reason),
+        source: null,
+        line: null,
+        stack: (event.reason && event.reason.stack) ? String(event.reason.stack).slice(0, 2000) : null
+      });
+    });
+  }
 }
 
 // ============================================================
