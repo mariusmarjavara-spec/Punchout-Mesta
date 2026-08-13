@@ -16,18 +16,35 @@ import Link from "next/link";
  * then on app/layout.tsx serves this device its real organization's
  * compiled Runtime on every load — no further action needed.
  *
- * Deliberately minimal: two fields, no new design system, matching this
- * codebase's own established "smallest solution" posture for internal
- * operator tooling (see app/ops/page.tsx's identical reasoning).
+ * Real bug found and fixed via actual browser + real-server end-to-end
+ * tracing this session (not caught by any prior VM-sandbox or curl-only
+ * test, since it only manifests across a real page reload): the secret
+ * was never persisted anywhere client-side, so a "provisioned" device
+ * could correctly identify its organization and fetch the right Runtime,
+ * but could never actually sign and send an export — ADMIN_CONFIG.
+ * exportHmacSecret stayed null forever. Also found: userId has no
+ * mechanism ANYWHERE in this app to ever be set — motor.js's own
+ * buildExportPacket() silently aborts every export without one
+ * (confirmed by reading it). Neither gap is specific to this fix; both
+ * were simply never reachable before real Runtime injection existed to
+ * expose them. Fixed by persisting both to the exact localStorage keys
+ * app/layout.tsx's injected script already reads.
+ *
+ * userId here names the worker primarily assigned to this device, not a
+ * login — matches this app's whole "no login system" posture. A device
+ * being reassigned to a different worker is a real, legitimate future
+ * need not solved here (deliberately: re-running this same one-time
+ * step is the smallest correct answer today).
  */
 export default function ProvisionPage() {
   const [deviceId, setDeviceId] = useState("");
   const [secret, setSecret] = useState("");
+  const [userId, setUserId] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
   async function submit() {
-    if (!deviceId.trim() || !secret.trim()) return;
+    if (!deviceId.trim() || !secret.trim() || !userId.trim()) return;
     setStatus("loading");
     setMessage(null);
     try {
@@ -42,11 +59,13 @@ export default function ProvisionPage() {
         setMessage(body.error || "Klarte ikke å registrere enheten (" + res.status + ")");
         return;
       }
-      // localStorage.punchout_device_id is the exact key motor.js's own
-      // getOrCreateDeviceId() reads first, before generating a random one —
-      // writing the admin-issued id here means motor.js picks it up
-      // transparently, no motor.js change needed for this half.
+      // These three keys are exactly what app/layout.tsx's injected
+      // beforeInteractive script reads to build window.PUNCHOUT_CONFIG,
+      // and (for punchout_device_id) the exact key motor.js's own
+      // getOrCreateDeviceId() reads first, before generating a random one.
       window.localStorage.setItem("punchout_device_id", body.deviceId);
+      window.localStorage.setItem("punchout_export_hmac_secret", secret.trim());
+      window.localStorage.setItem("punchout_user_id", userId.trim());
       setStatus("done");
       setMessage("Enheten er satt opp for organisasjon: " + body.organizationId);
     } catch (e) {
@@ -92,9 +111,18 @@ export default function ProvisionPage() {
               placeholder="hemmeligheten fra registreringssvaret"
             />
           </div>
+          <div>
+            <label className="block text-neutral-600 mb-1">arbeider (navn/id)</label>
+            <input
+              className="border rounded px-3 py-2 w-full"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="f.eks. ola.nordmann"
+            />
+          </div>
           <button
             className="border rounded px-3 py-2 bg-black text-white disabled:opacity-50"
-            disabled={status === "loading" || !deviceId.trim() || !secret.trim()}
+            disabled={status === "loading" || !deviceId.trim() || !secret.trim() || !userId.trim()}
             onClick={submit}
             type="button"
           >
