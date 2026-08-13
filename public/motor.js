@@ -150,6 +150,26 @@ var NORMALIZED_CONFIG = normalizeConfig(RUNTIME_CONFIG);
 ADMIN_CONFIG.lonnskoder = NORMALIZED_CONFIG.lonnskoder;
 ADMIN_CONFIG.hoofdordre = NORMALIZED_CONFIG.hoofdordre;
 
+// Operation Punchout Soft Launch, Phase B finding: userId/exportEndpoint/
+// exportHmacSecret/telemetryEndpoint/organizationId were declared on
+// ADMIN_CONFIG (defaulting to null) and read throughout motor.js, but
+// NOTHING ever copied them from RUNTIME_CONFIG (window.PUNCHOUT_CONFIG) the
+// way lonnskoder/hoofdordre are just above -- confirmed by exhaustive grep,
+// not assumed. The only thing that ever set these fields was test/regression
+// harnesses constructing their own sandbox by hand. In the real app, this
+// meant export and telemetry were unconditionally disabled and userId/
+// organizationId were unconditionally unset for every real device, with no
+// error or warning anywhere -- a silent, total gap between "compiled and
+// published Runtime" and "what a real browser actually uses." These fields
+// are intentionally NOT run through normalizeConfig(): they are plain
+// pass-through-or-null values (a secret, an id, a URL), not defaulted/
+// reshaped data like lonnskoder.
+ADMIN_CONFIG.userId = RUNTIME_CONFIG.userId || null;
+ADMIN_CONFIG.organizationId = RUNTIME_CONFIG.organizationId || null;
+ADMIN_CONFIG.exportEndpoint = RUNTIME_CONFIG.exportEndpoint || null;
+ADMIN_CONFIG.exportHmacSecret = RUNTIME_CONFIG.exportHmacSecret || null;
+ADMIN_CONFIG.telemetryEndpoint = RUNTIME_CONFIG.telemetryEndpoint || null;
+
 // ============================================================
 // RUNTIME INJECTION (Phase 9) — optional. window.PUNCHOUT_RUNTIME,
 // loaded by a script tag BEFORE motor.js (same pattern as
@@ -5676,7 +5696,17 @@ function emitTelemetry(type, data) {
         : "tel_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
       type: type,
       occurredAt: new Date().toISOString(),
-      organizationId: ADMIN_CONFIG.userId ? ADMIN_CONFIG.hovedordre : "unknown",
+      // Operation Punchout Soft Launch, Phase B finding: this read
+      // ADMIN_CONFIG.hovedordre (the main ORDER number, e.g. "HOVED" or
+      // "204481-0014") as a stand-in for organizationId -- the wrong field
+      // entirely, confused with the similarly-named-in-Norwegian "hovedordre"
+      // (main order) vs. organization identity. Never observed in practice
+      // because ADMIN_CONFIG.telemetryEndpoint was itself never wired to a
+      // real value until this same fix -- telemetry auto-flush never ran
+      // for a real device, so this never actually mis-filed a real event.
+      // Fixed at the same time telemetryEndpoint was wired, before either
+      // could reach a real server.
+      organizationId: ADMIN_CONFIG.organizationId || "unknown",
       data: data || {},
       flushed: false
     });

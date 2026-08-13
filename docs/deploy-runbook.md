@@ -93,15 +93,41 @@ curl -X POST $URL/api/runtime/publish \
   -H "Authorization: Bearer $PUNCHOUT_ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"organizationSlug":"<slug>","publishedBy":"<ditt navn>","approved":true}'
 
-# 5. Registrer hver pilotenhet for organisasjonen:
+# 5. Registrer hver pilotenhet for organisasjonen — organizationId er PÅKREVD
+#    (Operation Punchout Soft Launch, Phase B: dette er den eneste plassen en
+#    enhets organisasjon noensinne fastsettes — alt nedstrøms, inkludert
+#    hvilken Runtime enheten faktisk mottar, stoler på denne, aldri på noe
+#    enheten selv hevder):
 curl -X POST $URL/api/devices/register \
   -H "Authorization: Bearer $PUNCHOUT_ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d '{"deviceId":"<enhets-id>","registeredBy":"<ditt navn>"}'
-# -> secret vises KUN i dette svaret — lagre det på enheten nå
+  -d '{"deviceId":"<enhets-id>","organizationId":"<slug>","registeredBy":"<ditt navn>"}'
+# -> secret vises KUN i dette svaret — lagre det, sammen med deviceId, til steg 6
+
+# 6. Sett opp den fysiske enheten — ÉN gang, gjort AV en administrator/IT-ansvarlig
+#    PÅ selve enheten, ALDRI av arbeideren selv, FØR arbeideren tar den i bruk:
+#    Åpne $URL/provision i enhetens nettleser, lim inn deviceId og secret fra
+#    steg 5. Dette setter en httpOnly organisasjonscookie enheten deretter
+#    sender med hver forespørsel — app/layout.tsx leser den server-side og
+#    server-rendrer den ekte, publiserte Runtime-en for RIKTIG organisasjon
+#    FØR motor.js kjører (erstatter det statiske public/punchout-config.js
+#    kun for denne enheten; en ikke-oppsatt enhet fortsetter å bruke det
+#    statiske fallback-konfiget akkurat som før — ingen regresjon).
+#    Verifisert med ekte HTTP mot en ekte server, inkludert at to enheter for
+#    to ulike organisasjoner aldri ser hverandres data:
+#    node lib/regression/runtime-provisioning.mjs (kjøres også i CI).
 ```
 
-Ingen UI finnes for dette ennå — kun API. Vurder å bygge et minimalt admin-UI hvis antall
-organisasjoner vokser forbi et par håndfuller.
+Registrering (steg 5) har ingen UI ennå — kun API, kjørt av en administrator med
+`PUNCHOUT_ADMIN_TOKEN`. Enhetsoppsett (steg 6) har en minimal UI (`/provision`) siden det er
+den ene enkeltdelen en fysisk person faktisk må gjøre PÅ enheten selv. Vurder et fullt
+admin-UI for steg 1-5 hvis antall organisasjoner vokser forbi et par håndfuller.
+
+**Viktig presisering (Phase B, funnet ved å faktisk lese `app/layout.tsx` og hente
+rot-siden over ekte HTTP — ikke antatt fra API-lagets egen oppførsel alene): en enhet som
+ALDRI har gjennomført steg 6 fungerer fortsatt, men mottar det statiske, organisasjons-agnostiske
+`public/punchout-config.js`-fallback-konfiget — IKKE den organisasjonens faktiske publiserte
+Runtime, uansett hvor mange ganger steg 2-4 er kjørt for den organisasjonen. Steg 6 er derfor
+ikke valgfritt for en reell pilotenhet, kun for en ren demo-/standardøkt.**
 
 ## 3. Backup
 

@@ -46,6 +46,15 @@ jobs:
       - name: Security audit (live HTTP against every admin route)
         run: node lib/regression/security-audit.mjs
 
+      # Operation Punchout Soft Launch, Phase B: permanent guard against the
+      # vertical-integration gap this mission found and closed this session —
+      # a real device provisioning itself and a real browser's page request
+      # both proven over live HTTP against a real running server, including
+      # cross-organization isolation (no cross-contamination) and the
+      # unprovisioned-fallback path. See lib/regression/runtime-provisioning.mjs.
+      - name: Runtime provisioning (real device -> real per-org Runtime, live HTTP)
+        run: node lib/regression/runtime-provisioning.mjs
+
       # Execution Sprint 4, Oppgave 1/6: `next build` was never run in CI before
       # this — the only way anyone would have discovered a build break was a
       # human running it manually. Placed after the fast logic/regression
