@@ -21,6 +21,16 @@ jobs:
       - name: TypeScript
         run: npm run typecheck
 
+      # Operation Punchout Soft Launch, Phase A finding: `npm run lint` had been
+      # non-functional (no eslint dependency, no config file) and was never part
+      # of this workflow, so nothing ever ran it. Fixed and triaged in a prior
+      # commit (0 errors, 13 documented-and-accepted react-hooks/set-state-in-effect
+      # warnings); wiring it in now that it actually works and is clean. Placed
+      # after TypeScript and before the regression suite, matching this file's
+      # own "fail fast on cheaper checks first" ordering.
+      - name: Lint
+        run: npm run lint
+
       - name: Regression suite (motor.js, engine, backend auth/persistence)
         run: npm test
 
