@@ -1,7 +1,6 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import Script from 'next/script'
 import { cookies } from 'next/headers'
 // @ts-ignore
@@ -120,7 +119,6 @@ export default async function RootLayout({
         {/* Motor må lastes FØR React UI */}
         <Script src="/motor.js" strategy="beforeInteractive" />
         {children}
-        <Analytics />
       </body>
     </html>
   )
