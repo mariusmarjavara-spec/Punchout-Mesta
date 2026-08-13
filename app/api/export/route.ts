@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
 import { exportLog, recordExport, getDeviceSecret, isDeviceRegistered, isDeviceActive } from "@/lib/backend/state.mjs";
+// @ts-ignore
+import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
 
 /**
  * Del 4: the real export endpoint. Verifies the EXACT HMAC scheme
@@ -84,6 +86,15 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ receiptId: "receipt_" + exportId, status: "received", signatureVerified: true }, { status: 201 });
 }
 
-export async function GET() {
+// Dogfooding Punchout audit finding #1: this route had NO auth check at
+// all — any unauthenticated caller could read the entire export log
+// (device ids, organization ids, signature-validity history, no org
+// scoping even available). The same class of bug Execution Sprint 4
+// already fixed for /api/operations-center and /api/runtime/history, never
+// applied here. Now admin-gated, matching the rest of the admin surface.
+export async function GET(req: NextRequest) {
+  const auth = verifyAdminAuth(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
+
   return NextResponse.json({ count: exportLog.length, entries: exportLog });
 }
