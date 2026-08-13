@@ -39,6 +39,18 @@ COPY --from=builder /app/organizations ./organizations
 
 EXPOSE 3000
 ENV PORT=3000
+# Operation Punchout Soft Launch, Phase B: found via real Docker container
+# testing (never actually run before this session — every prior "Dockerfile
+# reviewed and built-against-in-practice" claim was true, but `docker build`
+# itself had never been executed). Docker sets HOSTNAME to the container ID
+# by default; Next.js's standalone server.js binds to process.env.HOSTNAME
+# if set, which resolves to the container's bridge IP, not all interfaces —
+# meaning a request to localhost/127.0.0.1 from INSIDE the container (e.g.
+# app/layout.tsx's own internal fetch to its own /api/runtime/active) fails
+# with ECONNREFUSED even though the app is reachable from outside via the
+# published port. Explicitly overriding HOSTNAME to 0.0.0.0 is the
+# documented fix.
+ENV HOSTNAME=0.0.0.0
 
 # PUNCHOUT_ADMIN_TOKEN must be set as a real secret at deploy time
 # (`fly secrets set PUNCHOUT_ADMIN_TOKEN=...`) — the app fails closed

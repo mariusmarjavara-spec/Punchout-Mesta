@@ -3,9 +3,13 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import Script from 'next/script'
 import { cookies } from 'next/headers'
-// @ts-ignore
-import { getActiveRuntime } from '@/lib/backend/state.mjs'
 import './globals.css'
+
+// Belt-and-suspenders: cookies() usage below already opts this layout
+// into per-request dynamic rendering, but this makes that guarantee
+// explicit rather than implicit, given how easy the module-instance bug
+// below was to get wrong.
+export const dynamic = 'force-dynamic'
 
 /**
  * Operation Punchout Soft Launch, Phase B — the missing half of "Field
@@ -91,6 +95,43 @@ export const metadata: Metadata = {
   },
 }
 
+/**
+ * Real, severe bug found via real-browser end-to-end testing (reproduced
+ * identically against the actual production Docker build, not just
+ * `next dev`, ruling out a dev-only artifact): a provisioned device's
+ * cookie was read correctly, but the Runtime it pointed to came back
+ * empty regardless — confirmed root cause via a temporary per-module
+ * instance-id log: Next.js compiles Route Handlers (app/api/**) and
+ * Server Components (layouts/pages) into SEPARATE bundles, and
+ * lib/backend/state.mjs's module-level in-memory Maps get an
+ * INDEPENDENT instantiation in each — a write made via
+ * POST /api/runtime/publish (the route-handler instance) was never
+ * visible to a direct getActiveRuntime() call from this layout (the
+ * server-component instance), even within the same process, even in the
+ * production standalone build. This was never reachable before this
+ * session's Phase B work, since state.mjs had never previously been
+ * imported from anywhere but a Route Handler.
+ *
+ * Fixed by crossing the exact boundary Next.js's architecture actually
+ * respects: a real internal HTTP call to this app's own
+ * GET /api/runtime/active, the same endpoint any other real client
+ * already uses — not a direct in-process function call into shared
+ * module state. cache: 'no-store' bypasses Next's fetch-level Data
+ * Cache, matching the always-fresh-per-request requirement here.
+ */
+async function fetchActiveRuntime(organizationId: string): Promise<any | null> {
+  const port = process.env.PORT || '3000'
+  try {
+    const res = await fetch(`http://localhost:${port}/api/runtime/active?org=${encodeURIComponent(organizationId)}`, {
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -103,7 +144,7 @@ export default async function RootLayout({
   // existing default/demo path or for CI, which never sets this cookie.
   const cookieStore = await cookies()
   const organizationId = cookieStore.get('punchout_org_id')?.value
-  const runtime = organizationId ? getActiveRuntime(organizationId) : null
+  const runtime = organizationId ? await fetchActiveRuntime(organizationId) : null
 
   return (
     <html lang="no">
