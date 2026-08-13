@@ -1,6 +1,8 @@
 # Mobile Readiness Protocol (Oppgave 8)
 
-**Status: forberedt, ikke utført.** Ingen fysiske enheter tilgjengelig i dette miljøet. Skrevet for et menneske å kjøre senere — ikke gjettet, bygget på det som faktisk finnes i koden i dag (`motor.js`s outbox/telemetri-mekanisme, CSS-nivå safe-area/touch-target-fikser fra tidligere faser).
+**Status: forberedt, ikke utført på ekte fysisk enhet.** Ingen fysiske enheter tilgjengelig i dette miljøet — **fortsatt sant**, dette gjelder uendret.
+
+**Oppdatering, Operation Punchout Soft Launch, Phase B**: et ekte Chromium (Playwright) viste seg tilgjengelig i en senere økt. Brukt til iPhone 13-**viewport-emulering** (ikke en fysisk enhet — skjermstørrelse/touch-hendelser emulert, ekte nettverksforhold/batteri/fysisk-tastatur-oppførsel fortsatt IKKE dekket) gjennom en full arbeidsdag. Fant én reell, tidligere ukjent feil: en flexbox-overflow-bug som dyttet "Logg"-knappen utenfor skjermen på ekte iPhone-bredde, med horisontal scroll som resultat, på den mest brukte skjermen i hele appen — funnet, fikset (`components/punchout/operations-phase.tsx`), og permanent automatisert guard lagt til (`lib/regression/browser-verification.mjs`). **Dette beviser IKKE mobil-beredskap** — kun at layoutet ikke bryter sammen ved iPhone-bredde i en emulert kontekst. Steg 2 (touch-mål), 3 (tastatur), 5 (safe areas), 8 (fly-modus) under krever fortsatt en ekte fysisk enhet og er ikke rørt av denne oppdateringen.
 
 ## Forutsetning
 
