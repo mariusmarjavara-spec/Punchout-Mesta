@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
-import { getDeviceSecret, getDeviceOrganization, isDeviceRegistered, isDeviceActive, issueDeviceSession } from "@/lib/backend/state.mjs";
+import { getDeviceSecret, getDeviceOrganization, isDeviceRegistered, isDeviceActive, issueDeviceSession, recordProvisionFailure } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { withRequestLog } from "@/lib/observability/request-log.mjs";
+// @ts-ignore
+import { checkProvisionRateLimit, recordFailedProvisionAttempt, clearProvisionRateLimit } from "@/lib/backend/provision-rate-limit.mjs";
+
+/** Fly.io/Railway (this app's documented deploy targets, see request-log.mjs) sit behind a proxy that sets this; "unknown" groups any request where it's genuinely absent (e.g. direct local access) into one bucket rather than skipping rate limiting for it. */
+function clientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
 
 /**
  * Operation Punchout Soft Launch, Phase B — closes the field client
@@ -29,20 +36,40 @@ import { withRequestLog } from "@/lib/observability/request-log.mjs";
  * the same credential /api/export already trusts for HMAC signing.
  */
 async function handlePost(req: NextRequest) {
+  const ip = clientIp(req);
+
+  // PO-04: checked before touching the device registry at all, so a
+  // throttled client can't use response-timing differences to keep
+  // probing — it just gets 429 immediately, every time, once over the
+  // threshold.
+  const rateLimit = checkProvisionRateLimit(ip);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "too many failed provisioning attempts — try again later" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
+
   const body = await req.json().catch(() => ({}));
   const { deviceId, secret } = body;
   if (!deviceId || !secret) {
     return NextResponse.json({ error: "deviceId and secret required" }, { status: 400 });
   }
 
+  function fail(reason: string, status: number) {
+    recordFailedProvisionAttempt(ip);
+    recordProvisionFailure(deviceId, ip, reason);
+    return NextResponse.json({ error: reason }, { status });
+  }
+
   if (!isDeviceRegistered(deviceId)) {
-    return NextResponse.json({ error: "unknown device — ask an administrator to register it via /api/devices/register first" }, { status: 401 });
+    return fail("unknown device — ask an administrator to register it via /api/devices/register first", 401);
   }
   if (!isDeviceActive(deviceId)) {
-    return NextResponse.json({ error: "this device has been disabled — contact your administrator" }, { status: 403 });
+    return fail("this device has been disabled — contact your administrator", 403);
   }
   if (getDeviceSecret(deviceId) !== secret) {
-    return NextResponse.json({ error: "invalid secret" }, { status: 401 });
+    return fail("invalid secret", 401);
   }
 
   const organizationId = getDeviceOrganization(deviceId);
@@ -51,9 +78,10 @@ async function handlePost(req: NextRequest) {
     // (backward-compat default, see state.mjs) — a real, actionable gap,
     // not a bug: this device must be re-registered with an organizationId
     // before it can be provisioned.
-    return NextResponse.json({ error: "this device has no organizationId on record — ask an administrator to re-register it with one" }, { status: 409 });
+    return fail("this device has no organizationId on record — ask an administrator to re-register it with one", 409);
   }
 
+  clearProvisionRateLimit(ip);
   const res = NextResponse.json({ deviceId, organizationId }, { status: 200 });
   res.cookies.set("punchout_org_id", organizationId, {
     httpOnly: true,
