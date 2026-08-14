@@ -4,6 +4,8 @@ import { compileFromPackage, publish } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { runFullDayScenario } from "@/lib/regression/full-day-scenario.mjs";
 // @ts-ignore
+import { resolveOrganizationDir } from "@/lib/organization-package/loader.mjs";
+// @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
 // @ts-ignore
 import { withRequestLog } from "@/lib/observability/request-log.mjs";
@@ -33,12 +35,19 @@ async function handlePost(req: NextRequest) {
   if (!organizationSlug) return NextResponse.json({ error: "organizationSlug required" }, { status: 400 });
   if (!approved) return NextResponse.json({ ok: false, stage: "approve", error: "publish requires approved: true" }, { status: 403 });
 
+  let orgDir: string;
+  try {
+    orgDir = resolveOrganizationDir(organizationSlug);
+  } catch (e: any) {
+    return NextResponse.json({ error: String(e?.message || e) }, { status: 400 });
+  }
+
   const compiled = compileFromPackage(organizationSlug);
   if (!compiled.valid) {
     return NextResponse.json({ ok: false, stage: "validate", errors: compiled.errors }, { status: 422 });
   }
 
-  const dryRun = await runFullDayScenario("./organizations/" + organizationSlug);
+  const dryRun = await runFullDayScenario(orgDir);
   if (!dryRun.ok) {
     return NextResponse.json({ ok: false, stage: "dry-run", detail: dryRun }, { status: 422 });
   }

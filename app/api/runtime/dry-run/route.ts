@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
 import { runFullDayScenario } from "@/lib/regression/full-day-scenario.mjs";
 // @ts-ignore
+import { resolveOrganizationDir } from "@/lib/organization-package/loader.mjs";
+// @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
 // @ts-ignore
 import { withRequestLog } from "@/lib/observability/request-log.mjs";
@@ -23,7 +25,14 @@ async function handlePost(req: NextRequest) {
   const { organizationSlug } = body;
   if (!organizationSlug) return NextResponse.json({ error: "organizationSlug required" }, { status: 400 });
 
-  const result = await runFullDayScenario("./organizations/" + organizationSlug);
+  let orgDir: string;
+  try {
+    orgDir = resolveOrganizationDir(organizationSlug);
+  } catch (e: any) {
+    return NextResponse.json({ error: String(e?.message || e) }, { status: 400 });
+  }
+
+  const result = await runFullDayScenario(orgDir);
   return NextResponse.json(result, { status: result.ok ? 200 : 422 });
 }
 
