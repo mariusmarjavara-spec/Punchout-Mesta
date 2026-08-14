@@ -118,12 +118,23 @@ export const metadata: Metadata = {
  * already uses — not a direct in-process function call into shared
  * module state. cache: 'no-store' bypasses Next's fetch-level Data
  * Cache, matching the always-fresh-per-request requirement here.
+ *
+ * Founder decision 2026-08-14: that route now returns only minimal,
+ * non-sensitive bootstrap metadata unless the caller presents a valid
+ * punchout_device_session. This outbound fetch is a fresh server-to-
+ * server request — Next.js never forwards the incoming browser request's
+ * cookies to it automatically — so the incoming session cookie is read
+ * explicitly (see RootLayout below) and forwarded here, or this layout
+ * would silently regress to the minimal-metadata response for every
+ * already-provisioned device and motor.js would never receive a real
+ * Runtime again.
  */
-async function fetchActiveRuntime(organizationId: string): Promise<any | null> {
+async function fetchActiveRuntime(organizationId: string, deviceSessionCookie: string | undefined): Promise<any | null> {
   const port = process.env.PORT || '3000'
   try {
     const res = await fetch(`http://localhost:${port}/api/runtime/active?org=${encodeURIComponent(organizationId)}`, {
       cache: 'no-store',
+      headers: deviceSessionCookie ? { cookie: `punchout_device_session=${deviceSessionCookie}` } : undefined,
     })
     if (!res.ok) return null
     return await res.json()
@@ -144,12 +155,19 @@ export default async function RootLayout({
   // existing default/demo path or for CI, which never sets this cookie.
   const cookieStore = await cookies()
   const organizationId = cookieStore.get('punchout_org_id')?.value
-  const runtime = organizationId ? await fetchActiveRuntime(organizationId) : null
+  const deviceSessionCookie = cookieStore.get('punchout_device_session')?.value
+  const runtime = organizationId ? await fetchActiveRuntime(organizationId, deviceSessionCookie) : null
+  // Founder decision 2026-08-14: without a valid device session, the route
+  // now returns only minimal bootstrap metadata (no runtimeConfig/schemas/
+  // rules) — that shape can never drive motor.js, so it's treated the same
+  // as "no runtime" and falls back to the static config below, exactly
+  // like an expired or not-yet-provisioned device already did.
+  const hasFullRuntime = runtime != null && runtime.runtimeConfig !== undefined
 
   return (
     <html lang="no">
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        {runtime ? (
+        {hasFullRuntime ? (
           <Script id="punchout-runtime-config" strategy="beforeInteractive">
             {buildInjectedConfigScript(runtime)}
           </Script>

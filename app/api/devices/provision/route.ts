@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
-import { getDeviceSecret, getDeviceOrganization, isDeviceRegistered, isDeviceActive } from "@/lib/backend/state.mjs";
+import { getDeviceSecret, getDeviceOrganization, isDeviceRegistered, isDeviceActive, issueDeviceSession } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { withRequestLog } from "@/lib/observability/request-log.mjs";
 
@@ -61,6 +61,21 @@ async function handlePost(req: NextRequest) {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 365, // a provisioned device stays provisioned for a year without needing this step again
+  });
+  // Founder decision 2026-08-14: punchout_org_id alone is a bare, unsigned
+  // value with zero cryptographic binding to the device secret — anyone
+  // could set it directly. This session token is the actual authorization
+  // credential GET /api/runtime/active now requires for the full compiled
+  // Runtime; organizationId is derived from it server-side, never trusted
+  // from a client-supplied org selector. Same maxAge as punchout_org_id —
+  // both cookies represent the same "this device stays provisioned" state.
+  const sessionToken = issueDeviceSession(deviceId);
+  res.cookies.set("punchout_device_session", sessionToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
   });
   return res;
 }
