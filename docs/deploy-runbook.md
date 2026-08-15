@@ -106,12 +106,15 @@ curl -X POST $URL/api/devices/register \
 # 6. Sett opp den fysiske enheten — ÉN gang, gjort AV en administrator/IT-ansvarlig
 #    PÅ selve enheten, ALDRI av arbeideren selv, FØR arbeideren tar den i bruk:
 #    Åpne $URL/provision i enhetens nettleser, lim inn deviceId og secret fra
-#    steg 5. Dette setter en httpOnly organisasjonscookie enheten deretter
-#    sender med hver forespørsel — app/layout.tsx leser den server-side og
-#    server-rendrer den ekte, publiserte Runtime-en for RIKTIG organisasjon
-#    FØR motor.js kjører (erstatter det statiske public/punchout-config.js
-#    kun for denne enheten; en ikke-oppsatt enhet fortsetter å bruke det
-#    statiske fallback-konfiget akkurat som før — ingen regresjon).
+#    steg 5. Dette setter to httpOnly cookies enheten deretter sender med
+#    hver forespørsel: punchout_org_id (organisasjonstilhørighet) og
+#    punchout_device_session (Founder-beslutning 2026-08-14, se under —
+#    den faktiske autorisasjonen for å hente hele den kompilerte Runtime-en).
+#    app/layout.tsx leser begge server-side og server-rendrer den ekte,
+#    publiserte Runtime-en for RIKTIG organisasjon FØR motor.js kjører
+#    (erstatter det statiske public/punchout-config.js kun for denne
+#    enheten; en ikke-oppsatt enhet fortsetter å bruke det statiske
+#    fallback-konfiget akkurat som før — ingen regresjon).
 #    Verifisert med ekte HTTP mot en ekte server, inkludert at to enheter for
 #    to ulike organisasjoner aldri ser hverandres data:
 #    node lib/regression/runtime-provisioning.mjs (kjøres også i CI).
@@ -128,6 +131,18 @@ ALDRI har gjennomført steg 6 fungerer fortsatt, men mottar det statiske, organi
 `public/punchout-config.js`-fallback-konfiget — IKKE den organisasjonens faktiske publiserte
 Runtime, uansett hvor mange ganger steg 2-4 er kjørt for den organisasjonen. Steg 6 er derfor
 ikke valgfritt for en reell pilotenhet, kun for en ren demo-/standardøkt.**
+
+**Oppdatert presisering (Founder-beslutning 2026-08-14, "runtime confidentiality
+boundary" — po-runtime-active-authorization-boundary): `GET /api/runtime/active` krever nå en
+gyldig `punchout_device_session`-cookie for å returnere hele den kompilerte Runtime-en (regler,
+skjemaer, ordre, maskiner, kunnskapsgraf — konfidensiell driftskonfigurasjon). Uten en gyldig
+sesjon (aldri provisjonert, eller enheten er deaktivert av en administrator siden sist) svarer
+ruten fortsatt `200`, men KUN med minimal, ikke-sensitiv bootstrap-/versjonsmetadata
+(`organizationId`, `runtimeVersion`, `compiledAt`, `checksum`) — samme praktiske utfall som over:
+enheten faller tilbake til det statiske konfiget, ikke organisasjonens faktiske Runtime.
+Deaktivering av en enhet (`POST /api/devices/revoke`) ugyldiggjør derfor en eksisterende
+provisjonert enhets sesjon umiddelbart, uten at cookien selv fjernes fysisk fra enheten — neste
+sideinnlasting faller tilbake til fallback-konfiget automatisk.**
 
 ## 3. Backup
 
