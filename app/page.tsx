@@ -7,8 +7,9 @@ import { HandrensPhase } from "@/components/punchout/handrens-phase";
 import { CompletionScreen } from "@/components/punchout/completion-screen";
 import { StaleDayBanner } from "@/components/punchout/stale-day-banner";
 import { StorageErrorOverlay } from "@/components/punchout/storage-error-overlay";
+import { captureTelemetry } from "@/lib/telemetry";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export default function PunchoutApp() {
   // Mount guard — server and first client render must produce identical HTML.
@@ -29,10 +30,20 @@ export default function PunchoutApp() {
   // Local UI-only state (transitions, animations - NOT business logic)
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [displayedPhase, setDisplayedPhase] = useState<string | null>(null);
+  const lastTrackedPhase = useRef<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Privacy-minimal product telemetry: phase only. No day-log contents,
+  // employee data, form values, location, free text, or person profile.
+  useEffect(() => {
+    if (!isMounted || !motor || lastTrackedPhase.current === currentPhase) return;
+
+    lastTrackedPhase.current = currentPhase;
+    captureTelemetry("phase viewed", { phase: currentPhase });
+  }, [currentPhase, isMounted, motor]);
 
   // Handle phase transitions (visual only)
   // Skip transition on initial mount (displayedPhase is null)
