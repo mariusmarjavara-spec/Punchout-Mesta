@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export async function GET() {
   }
 
   const host = rawHost.replace(/\/$/, "");
+  const tokenFingerprint = createHash("sha256").update(token).digest("hex").slice(0, 16);
 
   try {
     const response = await fetch(`${host}/i/v0/e/`, {
@@ -39,6 +41,7 @@ export async function GET() {
       tokenConfigured: true,
       hostConfigured: true,
       hostLooksEu: host === "https://eu.i.posthog.com",
+      tokenFingerprint,
       ingestOk: response.ok,
       ingestStatus: response.status,
     });
@@ -48,6 +51,7 @@ export async function GET() {
       tokenConfigured: true,
       hostConfigured: true,
       hostLooksEu: host === "https://eu.i.posthog.com",
+      tokenFingerprint,
       ingestOk: false,
       ingestStatus: null,
     });
