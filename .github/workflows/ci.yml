@@ -34,6 +34,16 @@ jobs:
       - name: Regression suite (motor.js, engine, backend auth/persistence)
         run: npm test
 
+      # Post-pilot engineering baseline finding: `npm run test:components` (the
+      # jsdom/React suite added alongside vitest.config.mts) existed but was
+      # never wired into this workflow, so nothing ever ran it — the same class
+      # of gap as the lint one documented above. It was also failing locally
+      # after any production build until vitest.config.mts's exclude list was
+      # fixed to ignore .next/**. Placed with the other fast checks, before the
+      # slower live-HTTP and browser stages.
+      - name: Component tests (jsdom, React UI layer)
+        run: npm run test:components
+
       - name: Runtime validation (all organization packages, full-day scenario)
         run: node lib/regression/cross-organization.mjs
 

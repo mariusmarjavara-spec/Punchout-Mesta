@@ -17,7 +17,15 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["**/*.test.tsx", "**/*.test.ts"],
-    exclude: ["node_modules/**", "lib/regression/**"],
+    // Post-pilot baseline finding: this list REPLACES vitest's defaults rather
+    // than extending them, so dropping `.next/**` meant that after any
+    // production build (`output: "standalone"` copies the whole source tree,
+    // test files included, into .next/standalone/) `vitest run` collected each
+    // test file twice and failed 3 of 6 files with "Cannot find module
+    // './cjs/react.development.js'" — the standalone tree's pruned
+    // node_modules. Exit code 1, purely from build output. Reproduced, then
+    // fixed here; `dist/**` is listed for the same reason Vitest ships it.
+    exclude: ["node_modules/**", "lib/regression/**", ".next/**", "dist/**"],
   },
   resolve: {
     alias: {

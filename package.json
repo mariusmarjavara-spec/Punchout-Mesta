@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node lib/regression/run.mjs",
-    "test:components": "vitest run"
+    "test:components": "vitest run",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run test:components && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
