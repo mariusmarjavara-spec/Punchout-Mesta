@@ -33,7 +33,15 @@ function buildInjectedConfigScript(runtime: any): string {
     sjaDefaults: runtime.runtimeConfig?.sjaDefaults ?? null,
     kjoretoy: runtime.runtimeConfig?.kjoretoy ?? [],
     externalLinks: runtime.runtimeConfig?.externalLinks ?? [],
-    hoofdordre: runtime.runtimeConfig?.hoofdordre ?? 'HOVED',
+    // `hoofdordre` is the organization's PRIMARY ACTIVE WORK ORDER
+    // (lib/organization/types.mjs toRuntimeConfig), not the main timesheet
+    // bucket — see normalizeConfig() in public/motor.js for why those must
+    // stay separate, and what breaks when they are conflated. It is passed
+    // through for consumers that want it. `hovedordre` (the main bucket) is
+    // deliberately NOT emitted here: no compiled OrganizationRuntime carries
+    // that setting today, so motor.js applies its documented "HOVED" default,
+    // which is exactly the live pilot's current behaviour.
+    hoofdordre: runtime.runtimeConfig?.hoofdordre ?? '',
     organizationId: runtime.organizationId,
     // exportEndpoint/telemetryEndpoint are always this same app's own
     // routes — relative, so they're correct regardless of deploy host.

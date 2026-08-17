@@ -163,6 +163,16 @@ export interface RuntimeConfig {
   sjaDefaults: { sted?: string; arbeidsvarsling?: string } | null;
   kjoretoy: string[];
   externalLinks: Array<{ id: string; title: string; url: string }>;
+  /** Reserved key of the MAIN TIMESHEET BUCKET — "hours not attributed to a
+   * specific order". Defaults to the placeholder "HOVED"; admin-settable via
+   * public/punchout-config.js section 5. motor.js treats it as a sentinel and
+   * excludes it from ordinary draft handling. Never a real work order. */
+  hovedordre: string;
+  /** The organization's PRIMARY ACTIVE WORK ORDER (lib/organization/types.mjs
+   * toRuntimeConfig), e.g. "204481-0014". Empty string when unknown. Despite
+   * the similar spelling this is NOT an alias of `hovedordre` — assigning it
+   * to the main bucket collides a real work draft with the main-time slot and
+   * deadlocks lockDay. See normalizeConfig() in public/motor.js. */
   hoofdordre: string;
 }
 

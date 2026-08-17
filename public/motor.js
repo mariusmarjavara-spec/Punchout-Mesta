@@ -36,25 +36,72 @@ var PILOT_DEFAULTS = {
     { id: "elrapp", title: "Logg inn i Elrapp", url: "https://elrapp.no" },
     { id: "linx",   title: "Linx-innlogging",   url: "https://linx.no"  },
   ],
-  hoofdordre: "HOVED",
+  hovedordre: "HOVED",
 };
 
 // ============================================================
 // normalizeConfig — tar råconfig, returnerer fullstendig
 // normalisert config med eksplisitt fallback for hvert felt.
 // Kalles én gang ved init; NORMALIZED_CONFIG brukes overalt.
+//
+// Post-pilot baseline finding (main-order contract break). `hovedordre` and
+// `hoofdordre` LOOK like a Norwegian/Dutch spelling pair for one field. They
+// are not the same field, and conflating them is destructive — see below.
+//
+//   `hovedordre`  — the reserved key of the MAIN TIMESHEET BUCKET: "the hours
+//                   for my day that aren't attributed to a specific order".
+//                   Ships as the placeholder "HOVED", documented as
+//                   admin-settable in public/punchout-config.js section 5, and
+//                   stubbed as "HOVED" by every motor test harness. motor.js
+//                   treats it as a SENTINEL throughout: getOrCreateMainDraft()
+//                   stamps isMain on it, and endDay(), getUnresolvedItems()
+//                   and getLockedHoursFromTillegg() all deliberately EXCLUDE
+//                   it from ordinary draft handling.
+//
+//   `hoofdordre`  — the organization's PRIMARY ACTIVE WORK ORDER, produced by
+//                   lib/organization/types.mjs toRuntimeConfig() as
+//                   `orders.find(o => o.active)`, e.g. Mesta's "204481-0014".
+//                   A real order a worker books real hours against.
+//
+// The verified defect is narrower than the spelling suggests: normalizeConfig
+// read `raw.hoofdordre`, and the line below assigned the result to
+// ADMIN_CONFIG.hoofdordre — a key NOTHING reads — so the documented,
+// admin-settable `hovedordre` was silently ignored on every config path, and
+// the main bucket was permanently the hardcoded literal. That is what is
+// fixed here.
+//
+// What is deliberately NOT done: mapping `hoofdordre` into `hovedordre`. That
+// was tried, and lib/regression/cross-organization.mjs caught the result. When
+// the main-bucket key equals a real order the worker has booked work on, the
+// two drafts collide: the worker's confirmed work draft BECOMES the main-time
+// bucket, getUnresolvedItems() then returns ZERO items while mainTimeHandled
+// stays false (so lockDay is blocked forever with nothing shown to resolve — a
+// hard deadlock), and any main-time discard silently flips real, confirmed
+// work to "discarded". The two values must stay separate. The original code's
+// separation was accidental, but it was behaviourally protective.
+// Pinned by config_contract_primary_active_order_must_not_become_the_main_bucket.
 // ============================================================
 function normalizeConfig(raw) {
   return {
+    // `navn` is what public/punchout-config.js documents and ships (section 1);
+    // `label` is what lib/organization/types.mjs toRuntimeConfig() emits. This
+    // previously read `lk.naam` — a spelling NOTHING in this repo produces —
+    // so every `{ kode, navn }` wage code silently fell through to its own
+    // kode as the display label ("100" instead of "Ordinær arbeidstid").
     lonnskoder: Array.isArray(raw.lonnskoder)
       ? raw.lonnskoder.map(function(lk) {
-          return { kode: lk.kode, label: lk.label || lk.naam || lk.kode };
+          return { kode: lk.kode, label: lk.label || lk.navn || lk.kode };
         })
       : PILOT_DEFAULTS.lonnskoder.map(function(lk) { return { kode: lk.kode, label: lk.label }; }),
     sjaDefaults: raw.sjaDefaults || null,
     kjoretoy: Array.isArray(raw.kjoretoy) ? raw.kjoretoy : PILOT_DEFAULTS.kjoretoy,
     externalLinks: Array.isArray(raw.externalLinks) ? raw.externalLinks : PILOT_DEFAULTS.externalLinks,
-    hoofdordre: raw.hoofdordre || PILOT_DEFAULTS.hoofdordre,
+    // Main timesheet bucket. A sentinel key, never a real work order.
+    hovedordre: raw.hovedordre || PILOT_DEFAULTS.hovedordre,
+    // The organization's primary active work order, passed through untouched
+    // for consumers that want it (lib/sync/dry-run.mjs, a future order picker).
+    // motor.js never books the main draft against it.
+    hoofdordre: raw.hoofdordre || "",
   };
 }
 var ADMIN_CONFIG = {
@@ -148,13 +195,21 @@ var RUNTIME_CONFIG = (typeof window !== 'undefined' && window.PUNCHOUT_CONFIG)
 
 var NORMALIZED_CONFIG = normalizeConfig(RUNTIME_CONFIG);
 ADMIN_CONFIG.lonnskoder = NORMALIZED_CONFIG.lonnskoder;
-ADMIN_CONFIG.hoofdordre = NORMALIZED_CONFIG.hoofdordre;
+// Post-pilot baseline finding (main-order contract break, second half): this
+// previously assigned to ADMIN_CONFIG.hoofdordre — a key NOTHING reads. All 12
+// real reads in this file use ADMIN_CONFIG.hovedordre (declared above with the
+// hardcoded "HOVED"), so the configured main order never reached the motor for
+// ANY organization or any config path: Mesta's real active order 204481-0014
+// was silently replaced by the literal "HOVED" as the main draft's key and as
+// the exported envelope's `ordre` for main time. Verified by grep over every
+// hovedordre/hoofdordre occurrence in the repo, not assumed.
+ADMIN_CONFIG.hovedordre = NORMALIZED_CONFIG.hovedordre;
 
 // Operation Punchout Soft Launch, Phase B finding: userId/exportEndpoint/
 // exportHmacSecret/telemetryEndpoint/organizationId were declared on
 // ADMIN_CONFIG (defaulting to null) and read throughout motor.js, but
 // NOTHING ever copied them from RUNTIME_CONFIG (window.PUNCHOUT_CONFIG) the
-// way lonnskoder/hoofdordre are just above -- confirmed by exhaustive grep,
+// way lonnskoder/hovedordre are just above -- confirmed by exhaustive grep,
 // not assumed. The only thing that ever set these fields was test/regression
 // harnesses constructing their own sandbox by hand. In the real app, this
 // meant export and telemetry were unconditionally disabled and userId/
@@ -4644,10 +4699,20 @@ function confirmStructuredEntry(text, type, parsed) {
       status: "confirmed",
       confirmedAt: new Date().toISOString()
     };
-    // Add lønnskode if time range present
+    // Add lønnskode if time range present.
+    // Post-pilot baseline finding: this hardcoded the literal "ORD" — a code
+    // from DEFAULT_LONNSKODER that is NOT in Mesta's configured set
+    // (100/200/300/999), and not in any organizations/*/runtime.json wageCodes
+    // either. Since confirmStructuredEntry() is the ONLY path that puts a
+    // lønnskode on an order draft in React mode, every structured order line
+    // the pilot has exported carries a wage code the payroll system was never
+    // told about. teAddLonnskode() (the vanilla path) already derived its
+    // default from the configured list; this now matches it exactly, keeping
+    // "ORD" only as the same last-resort fallback for an empty config.
     if (parsed.fra && parsed.til) {
+      var defaultLonnskode = ADMIN_CONFIG.lonnskoder.length > 0 ? ADMIN_CONFIG.lonnskoder[0].kode : "ORD";
       dayLog.drafts[parsed.ordre].lonnskoder.push({
-        kode: "ORD",
+        kode: defaultLonnskode,
         fra: parsed.fra,
         til: parsed.til
       });
