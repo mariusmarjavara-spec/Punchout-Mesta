@@ -2,7 +2,9 @@
 
 **Mission:** Operation Punchout Field Trial
 **Date:** 2026-08-17
-**Commit tested:** `c702b2b` (all work below is committed; working tree clean)
+**Commit tested:** `c702b2b` — the last commit containing executable change.
+The only later commit (`9c8be72`) adds this document and its companions; the
+gate was re-run there and still exits 0. Working tree clean.
 **Companion documents:** [FIELD_TEST_PLAYBOOK.md](FIELD_TEST_PLAYBOOK.md) ·
 [PRISM_ACTIVATION_PLAN.md](PRISM_ACTIVATION_PLAN.md) ·
 [POST_PILOT_ARCHITECTURE.md](POST_PILOT_ARCHITECTURE.md) ·
