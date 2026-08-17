@@ -65,6 +65,16 @@ jobs:
       - name: Runtime provisioning (real device -> real per-org Runtime, live HTTP)
         run: node lib/regression/runtime-provisioning.mjs
 
+      # Operation Punchout Field Trial: the outbound half of the same vertical
+      # path. Proves locked workday -> signed export -> Relay custody ->
+      # inspection -> CSV adapter -> SERVER RESTART -> readback, over live HTTP
+      # against a real server that is genuinely stopped and restarted mid-test.
+      # The restart is the point: the defect this replaced (the server verifying
+      # a workday's signature and then discarding the payload) was invisible to
+      # every in-process test that existed at the time.
+      - name: Relay delivery chain (locked day -> relay -> CSV -> restart -> readback)
+        run: node lib/regression/relay-delivery-chain.mjs
+
       # Operation Punchout Soft Launch, Phase B: this mission's own First
       # Principle is "a simulated integration is not an integrated product" —
       # every prior report in this engagement documented real browser

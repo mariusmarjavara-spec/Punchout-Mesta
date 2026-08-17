@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 // @ts-ignore
-import { exportLog, recordExport, getDeviceSecret, isDeviceRegistered, isDeviceActive, getDeviceOrganization } from "@/lib/backend/state.mjs";
+import { exportLog, recordExport, getDeviceSecret, isDeviceRegistered, isDeviceActive, getDeviceOrganization, getActiveRuntime } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { verifyAdminAuth } from "@/lib/backend/auth.mjs";
+// @ts-ignore
+import { receiveExport } from "@/lib/relay/store.mjs";
 
 /**
  * Del 4: the real export endpoint. Verifies the EXACT HMAC scheme
@@ -91,8 +93,46 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  recordExport({ receivedAt: new Date().toISOString(), exportId, organizationId, deviceId, signatureValid: true });
-  return NextResponse.json({ receiptId: "receipt_" + exportId, status: "received", signatureVerified: true }, { status: 201 });
+  // Operation Punchout Field Trial: the locked workday now enters the RELAY —
+  // durable custody — rather than being acknowledged and discarded.
+  //
+  // Everything above this line is unchanged, and that ordering is the trust
+  // boundary: every rejection path (unregistered device, disabled device,
+  // invalid signature) has already returned, so ONLY signature-verified
+  // exports can reach the Relay. A rejected delivery stays a receipt-log entry
+  // and can never be promoted to a trusted delivery state.
+  //
+  // Relay custody deliberately does NOT gate the response. The device has
+  // already done its part correctly; failing its export because the server's
+  // disk is full would push an unfixable failure back onto the worker, who
+  // would retry forever. A failed store is logged loudly, recorded on the
+  // receipt as `relayed: false`, and surfaced by GET /api/health.
+  let runtimeVersion: number | null = null;
+  try {
+    runtimeVersion = getActiveRuntime(organizationId)?.runtimeVersion ?? null;
+  } catch {
+    runtimeVersion = null;
+  }
+
+  const relayed = receiveExport({ exportId, organizationId, deviceId, packet, runtimeVersion });
+
+  recordExport({
+    receivedAt: new Date().toISOString(),
+    exportId,
+    organizationId,
+    deviceId,
+    signatureValid: true,
+    // The receipt now records whether the operational record itself was
+    // preserved, so "we have a receipt but no workday" is queryable rather
+    // than invisible.
+    relayed: relayed.stored,
+    relayReason: relayed.reason,
+  });
+
+  return NextResponse.json(
+    { receiptId: "receipt_" + exportId, status: "received", signatureVerified: true, relayed: relayed.stored },
+    { status: 201 },
+  );
 }
 
 // Dogfooding Punchout audit finding #1: this route had NO auth check at
@@ -105,5 +145,7 @@ export async function GET(req: NextRequest) {
   const auth = verifyAdminAuth(req);
   if (!auth.ok) return NextResponse.json({ error: auth.reason }, { status: 401 });
 
+  // Delivery receipts only. The operational records themselves are read
+  // through /api/relay, which owns that surface — see lib/relay/store.mjs.
   return NextResponse.json({ count: exportLog.length, entries: exportLog });
 }

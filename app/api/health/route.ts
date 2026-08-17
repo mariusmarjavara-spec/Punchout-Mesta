@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { getDeviceCounts, getLogSizes } from "@/lib/backend/state.mjs";
 // @ts-ignore
 import { getPersistenceHealth } from "@/lib/backend/persistence.mjs";
+// @ts-ignore
+import { relayCounts } from "@/lib/relay/store.mjs";
 
 /**
  * Execution Sprint 1 Oppgave 2. Unauthenticated by design (a health
@@ -40,5 +42,11 @@ export async function GET() {
     registeredDevices: devices,
     exportQueue: { totalReceived: logs.exportLogEntries },
     telemetryQueue: { totalReceived: logs.telemetryLogEntries },
+    // Operation Punchout Field Trial: counts of workdays held in durable Relay
+    // custody, per organization. Counts only — no ids, no payloads, no paths —
+    // matching this endpoint's existing "never leak content" rule. This is what
+    // makes "the receipt log says N exports arrived but the Relay holds M" a
+    // visible discrepancy rather than a silent one.
+    relay: { workdaysHeld: relayCounts() },
   });
 }
