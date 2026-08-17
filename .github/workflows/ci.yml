@@ -93,6 +93,14 @@ jobs:
       - name: Browser verification (real Chromium, full workday, live server)
         run: node lib/regression/browser-verification.mjs
 
+      # Operation Punchout Field Trial: phone-viewport coverage for the paths
+      # this mission added, which did not exist when the script above was
+      # written — main hours actually ENTERED and CONFIRMED (previously
+      # impossible), that confirmed line surviving into the Relay payload, the
+      # Relay inspection page, and touch-target sizes on the new controls.
+      - name: Browser field readiness (iPhone viewport, main hours, relay)
+        run: node lib/regression/browser-field-readiness.mjs
+
       # Execution Sprint 4, Oppgave 1/6: `next build` was never run in CI before
       # this — the only way anyone would have discovered a build break was a
       # human running it manually. Placed after the fast logic/regression
