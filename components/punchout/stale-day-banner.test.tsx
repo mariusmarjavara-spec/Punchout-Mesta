@@ -17,7 +17,7 @@ describe("StaleDayBanner", () => {
     const motor = fakeMotor();
     render(<StaleDayBanner date="2026-08-10" motor={motor} />);
 
-    expect(screen.getByText(/Du har ulagret data fra/)).toBeInTheDocument();
+    expect(screen.getByText(/Du har en dag som ikke ble avsluttet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fortsett dagen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Avslutt dagen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Forkast" })).toBeInTheDocument();
@@ -57,8 +57,11 @@ describe("StaleDayBanner", () => {
     // Clicking "Forkast" alone must NOT discard anything yet — it must
     // reveal the confirmation step first.
     expect(motor.discardStaleDay).not.toHaveBeenCalled();
-    expect(screen.getByText(/Forkast data fra/)).toBeInTheDocument();
-    expect(screen.getByText("All data fra denne dagen vil gå tapt. Dette kan ikke angres.")).toBeInTheDocument();
+    expect(screen.getByText(/Forkast dagen/)).toBeInTheDocument();
+    // Prism finding TR-01: this text previously claimed the data "vil gå tapt",
+    // which discardStaleDay() disproves — it archives to history first. The
+    // assertion now pins the accurate wording, so the false claim cannot return.
+    expect(screen.getByText(/arkiveres i historikken/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Ja, forkast" }));
     expect(motor.discardStaleDay).toHaveBeenCalledTimes(1);
@@ -86,6 +89,6 @@ describe("StaleDayBanner", () => {
     const motor = fakeMotor();
     render(<StaleDayBanner date="not-a-real-date" motor={motor} />);
 
-    expect(screen.getByText(/Du har ulagret data fra/)).toBeInTheDocument();
+    expect(screen.getByText(/Du har en dag som ikke ble avsluttet/)).toBeInTheDocument();
   });
 });

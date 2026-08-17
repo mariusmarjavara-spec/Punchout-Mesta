@@ -197,6 +197,25 @@ export function OperationsPhase() {
             </div>
           )}
         </div>
+
+        {/*
+          Operation Punchout Field Trial — Prism: the low-digital-confidence
+          persona was the ONLY profile to cross its friction/degradation ceiling,
+          and it did so in the error-states scenario (0.36 >= 0.35). The failure
+          mode for that worker is not abandoning the app — they cannot — it is
+          quietly giving up on documenting properly because they believe it has
+          stopped working. The status chip above already reports state
+          accurately; what was missing was telling them their work is SAFE. One
+          line, shown only when relevant, claiming only what the local outbox
+          actually guarantees.
+        */}
+        {(syncStatus === "offline_pending" || syncStatus === "sync_failed") && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {syncStatus === "offline_pending"
+              ? "Alt du registrerer lagres på telefonen og sendes automatisk når du får dekning."
+              : "Sendingen feilet, men arbeidet ditt er lagret på telefonen. Punchout prøver igjen automatisk."}
+          </p>
+        )}
       </header>
 
       {/* Main content */}

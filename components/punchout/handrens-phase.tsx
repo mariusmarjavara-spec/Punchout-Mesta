@@ -466,14 +466,30 @@ function LockDayButton({
   };
 
   return (
-    <button
-      onClick={handleLock}
-      disabled={isLocking}
-      type="button"
-      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-5 text-lg font-semibold text-primary-foreground transition-all active:scale-[0.98] disabled:opacity-50"
-    >
-      <Lock className="h-5 w-5" />
-      {isLocking ? "Låser..." : "Lås dag"}
-    </button>
+    <div className="space-y-2">
+      {/*
+        Operation Punchout Field Trial — Prism finding TR-01 fired here for 5 of
+        6 field personas, and notably NOT for the founder profile (baseline
+        trust 0.75 clears the commitment threshold on its own). Locking is the
+        single irreversible act of the workday: it archives the day, signs an
+        export packet and hands it to the outbox. The button said none of that,
+        so every worker except the one who built it was asked to commit without
+        being told what they were committing to. One sentence, stating only what
+        the code actually does — no reassurance that is not backed by the Relay.
+      */}
+      <p className="text-center text-xs text-muted-foreground">
+        Dagen låses og sendes til arbeidsgiver. Etterpå kan den ikke endres.
+        Sendingen skjer automatisk — også om du er uten dekning nå.
+      </p>
+      <button
+        onClick={handleLock}
+        disabled={isLocking}
+        type="button"
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-5 text-lg font-semibold text-primary-foreground transition-all active:scale-[0.98] disabled:opacity-50"
+      >
+        <Lock className="h-5 w-5" />
+        {isLocking ? "Låser..." : "Lås dag"}
+      </button>
+    </div>
   );
 }
