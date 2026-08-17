@@ -642,6 +642,15 @@ window.Motor = {
   confirmMainTimeEntry: confirmMainTimeEntry,
   discardMainTimeEntry: discardMainTimeEntry,
 
+  // Main-time lønnskoder (Operation Punchout Field Trial) — the capability
+  // that made confirming main time reachable from React at all. DOM-free by
+  // design; see the block above teAddLonnskode() for why they exist.
+  getMainTimeContext: getMainTimeContext,
+  getSuggestedMainTimeLonnskode: getSuggestedMainTimeLonnskode,
+  addMainTimeLonnskode: addMainTimeLonnskode,
+  updateMainTimeLonnskode: updateMainTimeLonnskode,
+  removeMainTimeLonnskode: removeMainTimeLonnskode,
+
   // Decision flow (legacy — vanilla mode)
   draftDecision: draftDecision,
   schemaDecision: schemaDecision,
@@ -976,23 +985,106 @@ function findUnconfirmedVaktlogg() {
 // --- Storage (one active day, immutable history) ---
 var storageError = null;  // Holds error info if storage is corrupt
 
-function saveCurrentDay() {
+/**
+ * Reclaim localStorage space so the CURRENT day can be written.
+ *
+ * Operation Punchout Field Trial (§22). A phone is exactly where browser
+ * storage limits bite: iOS Safari evicts under storage pressure, Safari
+ * private mode throws on every setItem, and an old Android device can sit near
+ * quota for weeks. Previously a failed write only set storageError and let the
+ * in-memory day keep advancing ahead of the persisted one, with no retry — so
+ * a refresh silently lost everything since the last successful write.
+ *
+ * The priority order here is deliberate and is the whole design: TODAY'S
+ * UNFINISHED WORK OUTRANKS ARCHIVED HISTORY. A worker can re-read an old day
+ * from the Relay; they cannot re-live this morning. So on a write failure we
+ * drop, in increasing order of regret:
+ *   1. old already-sent outbox entries (pure dead weight — the server has them);
+ *   2. the oldest half of local history (already exported and Relay-held);
+ *   3. all but the most recent handful of history entries.
+ * Each step is followed by a retry, and we stop at the first success.
+ *
+ * Nothing here can drop unsent outbox entries or the current day — those are
+ * the only two things on the device that exist nowhere else yet.
+ *
+ * @returns {boolean} whether space was actually reclaimed by this step
+ */
+function reclaimStorageSpace(step) {
   try {
-    if (dayLog) {
-      localStorage.setItem(STORAGE_KEY_CURRENT, JSON.stringify({
-        appState: appState,
-        dayLog: dayLog
-      }));
-    } else {
+    if (step === 1) {
+      var outbox = loadOutbox();
+      var before = outbox.length;
+      // Anything already accepted by the server is recoverable from the Relay.
+      var keep = outbox.filter(function (item) { return item.status !== "sent"; });
+      if (keep.length === before) return false;
+      saveOutbox(keep);
+      return true;
+    }
+    if (step === 2 || step === 3) {
+      var history = getHistory();
+      if (history.length === 0) return false;
+      // History is newest-first (pushToHistory unshifts).
+      var keepCount = step === 2 ? Math.floor(history.length / 2) : Math.min(history.length, 3);
+      if (keepCount >= history.length) return false;
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history.slice(0, keepCount)));
+      return true;
+    }
+  } catch (e) {
+    // Reclaim is best-effort: if even the cleanup write fails there is nothing
+    // more this layer can do, and the caller will surface the original error.
+    console.error("Failed to reclaim storage space (step " + step + "):", e);
+  }
+  return false;
+}
+
+function saveCurrentDay() {
+  if (!dayLog) {
+    try {
       localStorage.removeItem(STORAGE_KEY_CURRENT);
+      if (storageError && storageError.type === "save") {
+        storageError = null;
+        emitStateChange("storageError");
+      }
+    } catch (e) {
+      console.error("Failed to clear current day:", e);
     }
     emitStateChange("appState");
     emitStateChange("dayLog");
-  } catch (e) {
-    console.error("Failed to save current day:", e);
-    storageError = { type: "save", message: "Kunne ikke lagre dagens data", raw: String(e) };
-    emitStateChange("storageError");
+    return;
   }
+
+  var serialized = JSON.stringify({ appState: appState, dayLog: dayLog });
+  var lastError = null;
+
+  // Attempt 0 is the normal path; attempts 1..3 each reclaim space first.
+  for (var attempt = 0; attempt <= 3; attempt++) {
+    if (attempt > 0 && !reclaimStorageSpace(attempt)) continue;
+    try {
+      localStorage.setItem(STORAGE_KEY_CURRENT, serialized);
+      // A previously-failed write that now succeeds must clear the error;
+      // otherwise a single transient failure left the blocking overlay up
+      // forever, since nothing ever reset it.
+      if (storageError && storageError.type === "save") {
+        storageError = null;
+        emitStateChange("storageError");
+      }
+      emitStateChange("appState");
+      emitStateChange("dayLog");
+      return;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  console.error("Failed to save current day after reclaim attempts:", lastError);
+  storageError = {
+    type: "save",
+    message: "Kunne ikke lagre dagens data",
+    raw: String(lastError)
+  };
+  emitStateChange("storageError");
+  emitStateChange("appState");
+  emitStateChange("dayLog");
 }
 
 function loadFromStorage() {
@@ -4444,6 +4536,130 @@ function renderTimeEntryMaskintimeList() {
   container.innerHTML = html;
 }
 
+// ============================================================
+// MAIN TIME LØNNSKODER — React bridge
+//
+// Operation Punchout Field Trial finding (characterized first as
+// char_main_time_confirm_is_UNREACHABLE_through_the_react_bridge_today, then
+// fixed here). The main timesheet could only ever be DISCARDED in the shipped
+// app, never confirmed:
+//   - confirming requires >= 1 lønnskode line (resolveMainTime, and
+//     confirmMainTimeEntry independently);
+//   - grovutfyllMainDraft() deliberately adds none ("user adds them explicitly");
+//   - confirmStructuredEntry() only ever writes lønnskoder onto a parsed ORDER
+//     draft, never the main one;
+//   - teAddLonnskode()/addLonnskode() are vanilla-DOM functions reading
+//     document.querySelector, and were never on the window.Motor bridge.
+// Since buildExportPacket() exports only confirmed drafts, no pilot day had
+// ever exported a main-time line at all.
+//
+// This is a PORTING defect, not a product doctrine question: the vanilla UI
+// (renderMainTimeEntryContent, still in this file) shows the day's working
+// window, the locked tillegg hours, and a "+ Legg til lønnskode" button. The
+// intent to capture the full workday is unambiguous — the React rewrite simply
+// never carried the capability across.
+//
+// These functions are DOM-free so React can drive them, and they preserve the
+// existing doctrine exactly: nothing auto-fills a payroll line. A suggestion is
+// computed and offered, but only an explicit user action creates a line.
+// ============================================================
+
+/**
+ * Everything React needs to render main-time entry, derived — never stored —
+ * so it cannot drift from the draft it describes.
+ */
+function getMainTimeContext() {
+  if (!dayLog) return null;
+  var draft = dayLog.drafts ? dayLog.drafts[ADMIN_CONFIG.hovedordre] : null;
+  if (!draft) return null;
+  var locked = getLockedHoursFromTillegg();
+  return {
+    ordre: draft.ordre,
+    dato: draft.dato,
+    startTime: dayLog.startTime,
+    endTime: dayLog.endTime,
+    // Hours already booked on specific orders. They are LOCKED in the sense
+    // that main time is the remainder — editing them here would silently
+    // double-count the day.
+    lockedTilleggHours: locked.totalHours,
+    lockedTilleggDetails: locked.details,
+    lonnskoder: JSON.parse(JSON.stringify(draft.lonnskoder || [])),
+    availableLonnskoder: NORMALIZED_CONFIG.lonnskoder,
+    suggested: getSuggestedMainTimeLonnskode(),
+    status: draft.status
+  };
+}
+
+/**
+ * The line a worker would most likely want: the whole day minus whatever is
+ * already booked on specific orders, on the organization's first configured
+ * wage code. Offered as a default for an explicit "add" action — never written
+ * on its own. subtractHoursFromTime() has existed unused in this file since the
+ * vanilla UI was written; this is the calculation it was always for.
+ */
+function getSuggestedMainTimeLonnskode() {
+  if (!dayLog) return null;
+  var locked = getLockedHoursFromTillegg();
+  var fra = dayLog.startTime || null;
+  var til = dayLog.endTime || null;
+  if (til && locked.totalHours > 0) til = subtractHoursFromTime(til, locked.totalHours);
+  // A day whose tillegg already covers everything leaves nothing to suggest;
+  // returning null lets the UI say so rather than offering a zero-length line.
+  if (fra && til && compareTime(fra, til) >= 0) return null;
+  return {
+    kode: ADMIN_CONFIG.lonnskoder.length > 0 ? ADMIN_CONFIG.lonnskoder[0].kode : "ORD",
+    fra: fra || "",
+    til: til || ""
+  };
+}
+
+/** @returns {boolean} whether a line was added */
+function addMainTimeLonnskode(kode, fra, til) {
+  if (!dayLog) return false;
+  var draft = dayLog.drafts ? dayLog.drafts[ADMIN_CONFIG.hovedordre] : null;
+  if (!draft) return false;
+  if (draft.status === "confirmed" || draft.status === "discarded") return false;
+  if (!draft.lonnskoder) draft.lonnskoder = [];
+
+  var suggested = getSuggestedMainTimeLonnskode();
+  draft.lonnskoder.push({
+    kode: kode || (suggested ? suggested.kode : (ADMIN_CONFIG.lonnskoder[0] ? ADMIN_CONFIG.lonnskoder[0].kode : "ORD")),
+    fra: fra !== undefined && fra !== null ? fra : (suggested ? suggested.fra : ""),
+    til: til !== undefined && til !== null ? til : (suggested ? suggested.til : "")
+  });
+  saveCurrentDay();
+  return true;
+}
+
+/**
+ * @param {number} index
+ * @param {{kode?: string, fra?: string, til?: string}} patch
+ * @returns {boolean}
+ */
+function updateMainTimeLonnskode(index, patch) {
+  if (!dayLog || !patch) return false;
+  var draft = dayLog.drafts ? dayLog.drafts[ADMIN_CONFIG.hovedordre] : null;
+  if (!draft || !draft.lonnskoder || !draft.lonnskoder[index]) return false;
+  if (draft.status === "confirmed" || draft.status === "discarded") return false;
+  var line = draft.lonnskoder[index];
+  if (patch.kode !== undefined) line.kode = patch.kode;
+  if (patch.fra !== undefined) line.fra = patch.fra;
+  if (patch.til !== undefined) line.til = patch.til;
+  saveCurrentDay();
+  return true;
+}
+
+/** @returns {boolean} */
+function removeMainTimeLonnskode(index) {
+  if (!dayLog) return false;
+  var draft = dayLog.drafts ? dayLog.drafts[ADMIN_CONFIG.hovedordre] : null;
+  if (!draft || !draft.lonnskoder || !draft.lonnskoder[index]) return false;
+  if (draft.status === "confirmed" || draft.status === "discarded") return false;
+  draft.lonnskoder.splice(index, 1);
+  saveCurrentDay();
+  return true;
+}
+
 function teAddLonnskode() {
   if (!timeEntryOrdre) return;
   var draft = dayLog.drafts[timeEntryOrdre];
@@ -4780,7 +4996,26 @@ function getUnresolvedItems() {
   if (dayLog.schemas) {
     for (var i = 0; i < dayLog.schemas.length; i++) {
       var s = dayLog.schemas[i];
-      if (s.origin === "pre_day") continue; // Pre-day schemas are recommended, never blocking
+      // Pre-day schemas are recommendations and never block the day — with ONE
+      // exception, resolved deliberately during Operation Punchout Field Trial
+      // (§23, "no ambiguous lock rules before field test").
+      //
+      // forceStartDay() marks an ADMIN-REQUIRED pre-day schema "force_skipped"
+      // when the worker uses the escape hatch to start work anyway. Its comment
+      // has always said such items "MUST be resolved in Håndrens — they block
+      // lockDay", and they did not: this guard dropped every pre_day schema
+      // before status was examined, so the "force_skipped" branch in the status
+      // check below was unreachable and the claim was false.
+      //
+      // Fixed rather than merely re-documented, because the product semantics
+      // are unambiguous: if an employer marks a schema required and the worker
+      // forces past it, they must account for it before the day is signed off,
+      // or "required" means nothing. Safe to change now precisely BECAUSE the
+      // mechanism is still dormant — ADMIN_CONFIG.requiredSchemas is empty and
+      // no runtime path populates it, so no live pilot behaviour moves. Doing
+      // it later, once organizations can mark schemas required, would be a
+      // behaviour change under real field data.
+      if (s.origin === "pre_day" && s.status !== "force_skipped") continue;
       if (s.type === "friksjonsmaling") continue;
       if (s.status === "draft" || s.status === "deferred" || s.status === "force_skipped") {
         items.push({

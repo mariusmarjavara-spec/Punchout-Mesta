@@ -63,6 +63,23 @@ export interface MaskintimeEntry {
   timer: string;
 }
 
+/** Everything the Håndrens main-time card needs, derived by the motor rather
+ * than stored, so it cannot drift from the draft it describes. */
+export interface MainTimeContext {
+  ordre: string;
+  dato: string;
+  startTime: string | null;
+  endTime: string | null;
+  /** Hours already booked on specific orders — main time is the remainder. */
+  lockedTilleggHours: number;
+  lockedTilleggDetails: Array<{ ordre: string; kode: string; fra: string; til: string; hours: number }>;
+  lonnskoder: LonnskodeEntry[];
+  availableLonnskoder: Array<{ kode: string; label: string }>;
+  /** Offered as the default for an explicit "add" action — never auto-written. */
+  suggested: LonnskodeEntry | null;
+  status: string;
+}
+
 /** What motor.getSchemaFieldDefinitions() returns — Phase 9's Generic Schema Renderer source of truth, replacing React's own hardcoded SCHEMA_LABELS/REQUIRED_FIELDS/ENUM_OPTIONS copies. */
 export interface SchemaFieldDefinition {
   label: string;
@@ -220,6 +237,15 @@ declare global {
       confirmTimeEntry: () => void;
       confirmMainTimeEntry: () => void;
       discardMainTimeEntry: (reason: 'no_work_done' | 'logged_elsewhere') => void;
+      // Main-time lønnskoder (Operation Punchout Field Trial). Before these
+      // existed, nothing in React could add a lønnskode to the main draft, so
+      // main hours could only ever be discarded and no locked day exported a
+      // main-time line. See public/motor.js above teAddLonnskode().
+      getMainTimeContext: () => MainTimeContext | null;
+      getSuggestedMainTimeLonnskode: () => LonnskodeEntry | null;
+      addMainTimeLonnskode: (kode?: string, fra?: string, til?: string) => boolean;
+      updateMainTimeLonnskode: (index: number, patch: Partial<LonnskodeEntry>) => boolean;
+      removeMainTimeLonnskode: (index: number) => boolean;
       draftDecision: (action: string) => void;
       schemaDecision: (action: string) => void;
       friksjonDecision: (action: string) => void;
@@ -359,7 +385,7 @@ export function useMotorSnapshot(): MotorSnapshot | undefined {
 }
 
 // Read-only motor functions that should NOT dispatch state-change events
-const READONLY_MOTOR_FUNCTIONS = new Set(['getSnapshot', 'isSchemaRequired', 'toggleVoice', 'buildHumanReadableReport', 'getUnresolvedItems', 'parseEntry', 'getCompletionStatus', 'getTelemetryLog', 'getSchemaFieldDefinitions']);
+const READONLY_MOTOR_FUNCTIONS = new Set(['getSnapshot', 'isSchemaRequired', 'toggleVoice', 'buildHumanReadableReport', 'getUnresolvedItems', 'parseEntry', 'getCompletionStatus', 'getTelemetryLog', 'getSchemaFieldDefinitions', 'getMainTimeContext', 'getSuggestedMainTimeLonnskode']);
 
 /**
  * Hook for calling motor functions.

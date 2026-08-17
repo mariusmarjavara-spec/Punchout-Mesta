@@ -263,7 +263,33 @@ function MainTimeCard({
 
   const startTime = item.data.startTime ? String(item.data.startTime) : "?";
   const endTime = item.data.endTime ? String(item.data.endTime) : "?";
-  const lonnskoder = (item.data.lonnskoder as Array<{ kode: string; fra: string; til: string }>) || [];
+
+  /**
+   * Operation Punchout Field Trial: this card used to render the lønnskode
+   * list read-only, with "Bekreft timeark" permanently disabled because
+   * nothing in React could add a line — so main hours could only ever be
+   * DISCARDED, and no locked day ever exported a main-time line. The motor now
+   * exposes DOM-free main-time editing (see public/motor.js above
+   * teAddLonnskode); this reads through it rather than through item.data, so
+   * edits are reflected immediately instead of waiting for the item list to be
+   * rebuilt.
+   */
+  const ctx = motor.getMainTimeContext?.() ?? null;
+  const lonnskoder =
+    ctx?.lonnskoder ?? ((item.data.lonnskoder as Array<{ kode: string; fra: string; til: string }>) || []);
+  const availableCodes = ctx?.availableLonnskoder ?? [];
+  const lockedTillegg = ctx?.lockedTilleggHours ?? 0;
+
+  function hoursFor(lk: { fra: string; til: string }): number {
+    if (!lk.fra || !lk.til) return 0;
+    const [fh, fm] = lk.fra.split(":").map(Number);
+    const [th, tm] = lk.til.split(":").map(Number);
+    if ([fh, fm, th, tm].some((n) => Number.isNaN(n))) return 0;
+    let diff = th * 60 + tm - (fh * 60 + fm);
+    if (diff < 0) diff += 24 * 60;
+    return diff / 60;
+  }
+  const totalHours = lonnskoder.reduce((sum, lk) => sum + hoursFor(lk), 0);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -288,23 +314,78 @@ function MainTimeCard({
 
       {expanded && (
         <div className="border-t border-border px-4 py-3 space-y-3">
-          {/* Lønnskoder summary */}
-          {lonnskoder.length > 0 ? (
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lønnskoder</p>
-              <p className="text-xs text-muted-foreground/70">
-                Hvilken timekode arbeidet føres på (f.eks. ordinær tid, overtid)
+          {/* Lønnskoder — editable */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lønnskoder</p>
+            <p className="text-xs text-muted-foreground/70">
+              Hvilken timekode arbeidet føres på (f.eks. ordinær tid, overtid)
+            </p>
+
+            {lockedTillegg > 0 && (
+              <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{lockedTillegg.toFixed(1)} timer</span> er allerede ført
+                på egne ordrer. Hovedtimeføringen gjelder resten av dagen.
               </p>
-              {lonnskoder.map((lk, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="font-mono">{lk.kode}</span>
-                  <span className="text-muted-foreground">{lk.fra} – {lk.til}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Ingen lønnskoder lagt til</p>
-          )}
+            )}
+
+            {lonnskoder.length === 0 && (
+              <p className="text-sm text-muted-foreground">Ingen lønnskoder lagt til ennå.</p>
+            )}
+
+            {lonnskoder.map((lk, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
+                <select
+                  value={lk.kode}
+                  onChange={(e) => motor.updateMainTimeLonnskode?.(i, { kode: e.target.value })}
+                  aria-label="Lønnskode"
+                  className="min-h-11 flex-1 min-w-24 rounded-lg border border-border bg-background px-2 text-sm"
+                >
+                  {availableCodes.length === 0 && <option value={lk.kode}>{lk.kode}</option>}
+                  {availableCodes.map((c) => (
+                    <option key={c.kode} value={c.kode}>
+                      {c.kode} – {c.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="time"
+                  value={lk.fra || ""}
+                  onChange={(e) => motor.updateMainTimeLonnskode?.(i, { fra: e.target.value })}
+                  aria-label="Fra klokkeslett"
+                  className="min-h-11 w-28 rounded-lg border border-border bg-background px-2 text-sm"
+                />
+                <input
+                  type="time"
+                  value={lk.til || ""}
+                  onChange={(e) => motor.updateMainTimeLonnskode?.(i, { til: e.target.value })}
+                  aria-label="Til klokkeslett"
+                  className="min-h-11 w-28 rounded-lg border border-border bg-background px-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => motor.removeMainTimeLonnskode?.(i)}
+                  aria-label={`Fjern lønnskode ${lk.kode}`}
+                  className="min-h-11 min-w-11 rounded-lg border border-border px-3 text-sm text-destructive transition-all active:scale-95"
+                >
+                  Fjern
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => motor.addMainTimeLonnskode?.()}
+              className="flex min-h-11 w-full items-center justify-center rounded-lg border border-dashed border-border py-2.5 text-sm font-medium transition-all active:scale-[0.98]"
+            >
+              + Legg til lønnskode
+            </button>
+
+            {lonnskoder.length > 0 && (
+              <p className="text-right text-xs text-muted-foreground">
+                Sum hovedtimeføring: <span className="font-medium text-foreground">{totalHours.toFixed(1)} t</span>
+              </p>
+            )}
+          </div>
 
           {/* Action buttons */}
           {!showDiscardOptions ? (
@@ -320,7 +401,8 @@ function MainTimeCard({
               </button>
               {lonnskoder.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Lønnskoder mangler. Bruk «Forkast timeføring» dersom timer føres i annet system.
+                  Legg til minst én lønnskode for å bekrefte, eller bruk «Forkast timeføring» dersom timer føres i
+                  annet system.
                 </p>
               )}
               <button
