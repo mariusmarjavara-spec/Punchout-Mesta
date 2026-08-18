@@ -1,4 +1,5 @@
 const TELEMETRY_ID_KEY = "punchout:telemetry-id";
+const TELEMETRY_SCHEMA_VERSION = 1;
 
 type TelemetryProperties = Record<string, string | number | boolean | null>;
 
@@ -48,6 +49,9 @@ export function captureTelemetry(
       ...properties,
       $process_person_profile: false,
       product: "punchout",
+      environment: process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "unknown",
+      release: process.env.NEXT_PUBLIC_RELEASE_SHA ?? "unknown",
+      telemetrySchemaVersion: TELEMETRY_SCHEMA_VERSION,
     },
   };
 
