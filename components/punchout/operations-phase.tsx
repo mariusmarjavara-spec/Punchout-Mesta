@@ -90,6 +90,7 @@ export function OperationsPhase() {
   const [voiceBlockedByOffline, setVoiceBlockedByOffline] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the offline voice block when connectivity returns; isOnline is external state
     if (isOnline) setVoiceBlockedByOffline(false);
   }, [isOnline]);
 

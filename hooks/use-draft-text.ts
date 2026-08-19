@@ -36,6 +36,7 @@ export function useDraftText(storageKey: string): [string, (value: string) => vo
   // Restore a saved draft once, on mount.
   useEffect(() => {
     const saved = readDraft(window.localStorage, storageKey);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restores a persisted draft so a refresh cannot silently discard typed text
     if (saved) setValueState(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

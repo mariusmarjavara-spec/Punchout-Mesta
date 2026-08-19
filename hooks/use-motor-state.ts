@@ -333,6 +333,7 @@ export function useMotorState<K extends keyof MotorSnapshot>(key: K): MotorSnaps
       };
     } else {
       // Motor already available — trigger initial render with data
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- forces the first read once window.Motor exists; the value itself is always read fresh from getSnapshot() and never cached
       setRevision(r => r + 1);
     }
 
@@ -372,6 +373,7 @@ export function useMotorSnapshot(): MotorSnapshot | undefined {
         window.removeEventListener('motor-state-change', handler);
       };
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- forces the first read once window.Motor exists; the value itself is always read fresh from getSnapshot() and never cached
       setRevision(r => r + 1);
     }
 
@@ -405,6 +407,7 @@ export function useMotor() {
 
   useEffect(() => {
     if (window.Motor) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- forces the first read once window.Motor exists; the value itself is always read fresh from getSnapshot() and never cached
       setReady(true);
       return;
     }

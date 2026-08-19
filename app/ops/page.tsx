@@ -65,6 +65,7 @@ export default function OpsPage() {
   // Restore a previously-entered token for this tab session only (sessionStorage, not localStorage).
   useEffect(() => {
     const saved = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restores a token saved for this tab; sessionStorage cannot be read during SSR
     if (saved) setToken(saved);
   }, []);
 

@@ -118,6 +118,7 @@ export function StartDayPhase() {
   const [voiceBlockedByOffline, setVoiceBlockedByOffline] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the offline voice block when connectivity returns; isOnline is external state
     if (isOnline) setVoiceBlockedByOffline(false);
   }, [isOnline]);
   // Text input for start-idle (optional, passed to startDay if filled)
@@ -144,6 +145,7 @@ export function StartDayPhase() {
     if (startUIState === 'listening' && voiceState !== 'listening' && voiceState !== 'processing') {
       if (appState === 'ACTIVE') {
         // Voice result triggered startDay — show pre-day review
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- advances the UI when voice recognition stops; voiceState is owned by motor.js
         setStartUIState('review');
       } else {
         // No speech captured or recognition failed — return to idle
@@ -165,6 +167,7 @@ export function StartDayPhase() {
   useEffect(() => {
     if (!continueBlockedMessage) return;
     const stillUnconfirmed = getUnconfirmedRequiredSchemas(preDaySchemas, (type: string) => !!motor?.isSchemaRequired(type));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the block message once the required schemas it named are resolved
     if (stillUnconfirmed.length === 0) setContinueBlockedMessage(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preDaySchemas]);

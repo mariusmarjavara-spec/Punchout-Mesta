@@ -36,6 +36,7 @@ export default function PunchoutApp() {
   const [displayedPhase, setDisplayedPhase] = useState<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration guard — a component cannot know it is mounted during SSR
     setIsMounted(true);
     initUxTelemetrySync();
   }, []);
@@ -45,6 +46,7 @@ export default function PunchoutApp() {
   useEffect(() => {
     if (displayedPhase === null) {
       // First render — show content immediately, no transition
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- first paint shows the current phase immediately, deliberately skipping the transition
       setDisplayedPhase(currentPhase);
       return;
     }
