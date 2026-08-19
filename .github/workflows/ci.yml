@@ -12,7 +12,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22, not 20. jsdom pulls undici 8, whose CacheStorage calls
+          # webidl.util.markAsUncloneable — absent on Node 20, so the component
+          # test step dies with "Failed to start forks worker" before running a
+          # single test. It passed locally only because this machine runs 24.
+          #
+          # The cost was not one red step: it gated twelve downstream jobs,
+          # including the live security audit, the relay delivery chain, the
+          # real-Chromium workday and the production build. Every one of them
+          # reported "skipped", which is not evidence of anything.
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
