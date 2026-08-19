@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureTelemetry } from "@/lib/telemetry";
 
 export default function Error({
   error,
@@ -11,6 +12,10 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error("Punchout feil:", error);
+    captureTelemetry("app error", {
+      boundary: "root",
+      has_digest: Boolean(error.digest),
+    });
   }, [error]);
 
   return (

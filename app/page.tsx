@@ -9,8 +9,9 @@ import { StaleDayBanner } from "@/components/punchout/stale-day-banner";
 import { StorageErrorOverlay } from "@/components/punchout/storage-error-overlay";
 import { CrossTabConflictBanner } from "@/components/punchout/cross-tab-conflict-banner";
 import { useCrossTabConflict } from "@/hooks/use-cross-tab-conflict";
+import { captureTelemetry } from "@/lib/telemetry";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 // @ts-ignore
 import { initUxTelemetrySync } from "@/lib/telemetry/ux-events.mjs";
 
@@ -34,12 +35,22 @@ export default function PunchoutApp() {
   // Local UI-only state (transitions, animations - NOT business logic)
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [displayedPhase, setDisplayedPhase] = useState<string | null>(null);
+  const lastTrackedPhase = useRef<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration guard — a component cannot know it is mounted during SSR
     setIsMounted(true);
     initUxTelemetrySync();
   }, []);
+
+  // Privacy-minimal product telemetry: phase only. No day-log contents,
+  // employee data, form values, location, free text, or person profile.
+  useEffect(() => {
+    if (!isMounted || !motor || lastTrackedPhase.current === currentPhase) return;
+
+    lastTrackedPhase.current = currentPhase;
+    captureTelemetry("phase viewed", { phase: currentPhase });
+  }, [currentPhase, isMounted, motor]);
 
   // Handle phase transitions (visual only)
   // Skip transition on initial mount (displayedPhase is null)

@@ -8,6 +8,9 @@ const nextConfig = {
   // clean at removal: `npm run typecheck` and `npm run build` both pass with
   // zero errors, so nothing was being hidden at the time it came off. Do not
   // re-add it to get an unblocked build; fix the types instead.
+  //
+  // The merge of origin/main restored it on that side; it is deliberately not
+  // taken. Everything else from that branch is.
   images: {
     unoptimized: true,
   },
@@ -20,6 +23,15 @@ const nextConfig = {
   // response header — a low-severity but real version-fingerprinting leak,
   // no behavior change otherwise.
   poweredByHeader: false,
+  // Release provenance, from origin/main. Falls back through Vercel's build
+  // variables to explicit ones, so it stays correct on the Docker/Fly path
+  // this branch added.
+  env: {
+    NEXT_PUBLIC_RELEASE_SHA:
+      process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.NEXT_PUBLIC_RELEASE_SHA ?? "unknown",
+    NEXT_PUBLIC_DEPLOYMENT_ENV:
+      process.env.VERCEL_ENV ?? process.env.NEXT_PUBLIC_DEPLOYMENT_ENV ?? "unknown",
+  },
 }
 
 export default nextConfig
