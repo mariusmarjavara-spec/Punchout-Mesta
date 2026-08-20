@@ -147,3 +147,67 @@ here, not an implementation preference.
 
 Explicitly out of scope for this document: naming the store. That is the next
 task, and it depends on this one.
+
+## Replacing the store
+
+Measured on 2026-08-20 rather than assumed. The seam is already narrow, and the
+point of writing it down is to keep it that way: a future SQLite or Postgres
+implementation should not require touching Motor, Runtime or Relay contracts.
+
+There are exactly three boundaries.
+
+### 1. Backend state — `lib/backend/persistence.mjs`
+
+`lib/backend/state.mjs` is its **only** importer, and uses **two** functions:
+
+```
+loadPersistedState()      -> snapshot | null
+persistState(snapshot)    -> void          (writes tmp + renameSync, C1)
+```
+
+A datastore implementation replaces that module and nothing above it. Everything
+else in `state.mjs` — the device registry, export log, telemetry log, runtime
+history — is in-memory structure that happens to be snapshotted; none of it
+reaches for the filesystem itself.
+
+The cost this seam currently imposes, stated plainly: `persistState` rewrites
+the entire blob on every `persistNow()`. That is the property a real store would
+most obviously improve, and it is a performance characteristic rather than a
+correctness one, so it does not by itself justify a migration.
+
+### 2. Relay archive — `lib/relay/store.mjs`
+
+A separate, file-per-record archive with its own directory-level organization
+isolation (C5). Verified: **nothing reads the archive without going through this
+module** — no route, no adapter and no other library resolves a relay path or
+reads a payload file directly. Its exported functions are the whole surface, so
+it can be reimplemented against a table without any caller changing.
+
+Isolation is structural here rather than filtered: organization A's directory
+cannot name organization B's files, so a cross-organization read resolves to a
+path that does not exist. **A store replacement must reproduce that structurally
+too** — a `WHERE organization_id = ?` is a filter someone can forget, and is a
+weaker guarantee than the one being replaced. Say so explicitly if that trade is
+made.
+
+### 3. Version allocation — `allocateNextRuntimeVersion(history)`
+
+`lib/backend/state.mjs`. This is C3 in one pure function, extracted so the gap
+has a name: it reads the history and returns `max + 1`, and the `publish` that
+consumes it is a later, separate write. Two callers observing the same history
+compute the same number every time — not occasionally.
+
+**This is the single function an atomic store replaces**, with a sequence, a
+unique constraint or a compare-and-swap. When that happens,
+`lib/regression/persistence-contract-cases.mjs` will start failing, and that is
+the intended signal rather than a problem: those cases pin the current
+behaviour deliberately, so closing the gap has to be a decision someone makes
+rather than a drift nobody notices.
+
+### What is deliberately not being done
+
+No store has been chosen, and nothing here migrates anything. The gap is
+detected (C2), named, and now regression-protected at its source. That is the
+whole of what is warranted before a real blocker forces the decision — a
+migration undertaken on preference rather than on evidence would replace a
+known, bounded weakness with an unknown set of new ones.
