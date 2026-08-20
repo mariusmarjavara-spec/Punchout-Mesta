@@ -38,9 +38,10 @@ code, `git log` and the CI run on `main` outrank every document here.
   datastore.
 - **[GUIDED_FORMS.md](GUIDED_FORMS.md)** — the guided SJA/RUH interaction
   model, information classes, provenance, prefill sources, mobile acceptance
-  and Prism findings. Verdict: **GUIDED FORMS READY FOR PHYSICAL FIELD TEST**
+  and Prism findings. Verdict: **GUIDED FORMS READY FOR PHYSICAL RE-TEST**
   — both flows reachable through the real worker path and proven on a
-  phone-sized real browser.
+  phone-sized real browser, but not yet physically re-verified on the
+  founder's phone.
 - **[DATA_INVARIANTS.md](DATA_INVARIANTS.md)** — the ten invariants behind the
   central promise: from "Start day" until lock and handoff, normal failures must
   not silently destroy recorded work.

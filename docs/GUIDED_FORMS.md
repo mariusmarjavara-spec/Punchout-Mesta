@@ -2,18 +2,20 @@
 
 **Status:** CURRENT · **Date:** 2026-08-20
 
-**Verdict: `GUIDED FORMS READY FOR PHYSICAL FIELD TEST`.**
+**Verdict: `GUIDED FORMS READY FOR PHYSICAL RE-TEST`.**
 
 Both SJA and RUH are reachable through the real worker path and proven end to
-end on a phone-sized real browser. The three blockers that produced the earlier
-NOT READY are closed, and both non-blockers with them.
+end on a phone-sized real browser. The three in-repo blockers that produced the
+earlier NOT READY are closed, and both non-blockers with them.
 
 The gate is the reachable worker flow, not the engine tests: 19 guided SJA
 checks inside `browser-field-readiness.mjs` (44 total) and 17 in
 `browser-guided-ruh.mjs`, each starting from provisioning and ending at a
-confirmed schema. What remains unproven is what a browser cannot prove — real
-touch, real keyboards, real Safari, real weather. That is what the physical
-field test is for.
+confirmed schema. This is `CODE-VERIFIED`, `TEST-VERIFIED` and
+`BROWSER-VERIFIED`. It is not `PHYSICAL-DEVICE-VERIFIED` or
+`REAL-WORKDAY-VERIFIED`. What remains unproven is what a browser cannot prove
+— real touch, real keyboards, real Safari, real weather. That is what the
+physical re-test is for.
 
 ---
 
@@ -214,9 +216,15 @@ stayed green.
 
 ## Known limitations
 
+- The founder previously observed real Android failures on an earlier build.
+  This document does not erase that history; it states only that the current
+  code is ready to be re-tested on the phone.
 - Chromium's iPhone emulation is not a phone. Real touch, real keyboards, real
   Safari and real network transitions remain unverified.
 - Prism evidence is Signal-level, not a completed Review.
+- Start/active voice still uses the older auto-stop session model in
+  `public/motor.js`. Explicit worker-controlled finish is not part of this
+  verified unit and remains a separate P1 follow-up.
 - The guided flow covers SJA and RUH. `kjoretoyssjekk` and every other schema
   type still open the generic field editor, which is unchanged.
 - `fieldProvenance` is null for anything completed through that editor. Honest:
