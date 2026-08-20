@@ -723,6 +723,10 @@ window.Motor = {
   toggleVoice: toggleVoice,
   diagnoseVoice: diagnoseVoice,
   buildSchemaContextFromText: buildSchemaContextFromText,
+  buildGuidedFormContext: buildGuidedFormContext,
+  getGuidedFormState: getGuidedFormState,
+  setGuidedFormState: setGuidedFormState,
+  applyGuidedFormToSchema: applyGuidedFormToSchema,
 
   // Export
   syncExports: syncExports,
@@ -1847,6 +1851,16 @@ function startDay(inputText) {
     entries: [],
     drafts: {},
     schemas: [],
+    /**
+     * Guided Forms progress, keyed by form id.
+     *
+     * Lives in dayLog because dayLog is what survives a refresh, a
+     * backgrounded tab and an offline period. The mission is explicit that
+     * domain progress persists and UI/animation state does not: a worker
+     * returning to the app lands on the same prompt with the same answers
+     * because the step index is HERE, not in a React hook.
+     */
+    guidedForms: {},
     phase: "pre",     // "pre" | "active" | "ending" — always start in pre-day phase
     status: "ACTIVE",
     mainTimeHandled: false  // Flag: main timesheet has been handled at end of day
@@ -6357,6 +6371,160 @@ function backfillDraftSchemasFromText(text) {
       }
     }
   }
+}
+
+/**
+ * Everything Punchout already knows about the current workday, for Guided
+ * Forms to reuse.
+ *
+ * Section 13: "Do not scrape displayed UI text. Use domain state." Every value
+ * below comes from dayLog, the device registry or the compiled Runtime — never
+ * from anything rendered.
+ *
+ * The governing rule this serves: ikke spor arbeideren om informasjon Punchout
+ * allerede kan vite sikkert. Each key here is one question a worker does not
+ * have to answer twice.
+ */
+function buildGuidedFormContext() {
+  var context = {
+    date: dayLog ? dayLog.date : null,
+    time: formatTime(new Date()),
+    organizationName: (NORMALIZED_CONFIG && NORMALIZED_CONFIG.organizationName) || null,
+    userId: (ADMIN_CONFIG && ADMIN_CONFIG.userId) || null,
+    activity: null,
+    location: null,
+    machine: null,
+    orderReference: null,
+    workWarningPlan: null,
+    crew: null
+  };
+  if (!dayLog) return context;
+
+  // The most recent entry that yielded a fact wins. A worker who has moved to
+  // a new road since this morning should not have this morning's road proposed
+  // back at them.
+  var entries = dayLog.entries || [];
+  for (var i = entries.length - 1; i >= 0; i--) {
+    var text = entries[i] && entries[i].text;
+    if (!text) continue;
+    var extracted = buildSchemaContextFromText(text);
+    if (!context.location && extracted.sted) context.location = extracted.sted;
+    if (!context.machine && extracted.kjoretoy) context.machine = extracted.kjoretoy;
+    if (!context.orderReference && extracted.ordre) context.orderReference = extracted.ordre;
+    if (!context.activity) {
+      var activity = extractActivityFromText(text);
+      if (activity) context.activity = activity;
+    }
+    if (!context.workWarningPlan) {
+      var plan = extractWorkWarningPlan(text);
+      if (plan) context.workWarningPlan = plan;
+    }
+  }
+
+  // Confirmed schema values outrank extraction: a worker already corrected
+  // those, and re-proposing an extraction over them would undo the correction.
+  var schemas = dayLog.schemas || [];
+  for (var s2 = 0; s2 < schemas.length; s2++) {
+    var f = schemas[s2] && schemas[s2].fields;
+    if (!f || schemas[s2].status !== "confirmed") continue;
+    if (f.sted) context.location = f.sted;
+    if (f.kjoretoy) context.machine = f.kjoretoy;
+  }
+
+  return context;
+}
+
+/**
+ * The work activity, as a short noun phrase.
+ *
+ * Deliberately a small known-vocabulary lookup rather than a parser. A wrong
+ * activity proposed confidently is worse than no proposal, and the worker can
+ * always type one.
+ */
+function extractActivityFromText(text) {
+  var lower = String(text || "").toLowerCase();
+  var known = [
+    ["grofterensk", "Grofterensk"], ["grøfterensk", "Grøfterensk"],
+    ["brøyting", "Brøyting"], ["strøing", "Strøing"],
+    ["kantklipp", "Kantklipp"], ["feiing", "Feiing"],
+    ["asfaltering", "Asfaltering"], ["skilting", "Skilting"],
+    ["rydding", "Rydding"], ["befaring", "Befaring"],
+    ["vedlikehold", "Vedlikehold"], ["inspeksjon", "Inspeksjon"]
+  ];
+  for (var i = 0; i < known.length; i++) {
+    if (lower.indexOf(known[i][0]) !== -1) return known[i][1];
+  }
+  return null;
+}
+
+/**
+ * A work-warning plan reference such as "Arbeidsvarsling 24-184".
+ *
+ * Distinct from the SJA `arbeidsvarsling` field, which is an enum describing
+ * the TYPE of warning (ingen/enkel/manuell/full). A plan number is a different
+ * fact and does not belong in that enum -- forcing it there would corrupt the
+ * schema contract that adapters and export already depend on.
+ */
+function extractWorkWarningPlan(text) {
+  var m = String(text || "").match(/arbeidsvarsling(?:splan)?\s*(?:nr\.?|plan)?\s*([0-9]{1,4}-[0-9]{1,4})/i);
+  return m ? m[1] : null;
+}
+
+/** Read persisted Guided Form progress. Null when the form has not started. */
+function getGuidedFormState(formId) {
+  if (!dayLog || !dayLog.guidedForms) return null;
+  return dayLog.guidedForms[formId] || null;
+}
+
+/**
+ * Persist Guided Form progress.
+ *
+ * The engine that produced this state is pure and lives in lib/guided-forms/;
+ * this is the only place its output becomes durable. Saving on every step is
+ * what makes "resume at the same prompt" true rather than aspirational.
+ */
+function setGuidedFormState(formId, state) {
+  if (!dayLog) return false;
+  if (!dayLog.guidedForms) dayLog.guidedForms = {};
+  dayLog.guidedForms[formId] = state;
+  saveCurrentDay();
+  emitStateChange("dayLog");
+  return true;
+}
+
+/**
+ * Write a completed Guided Form into its schema instance.
+ *
+ * Only confirmed values arrive here -- the engine filters unconfirmed
+ * inferences out before this point -- and NEVER_AUTO_FILL is checked again
+ * anyway, because this is a second write path into a safety document and a
+ * boundary enforced in only one of two places is not a boundary.
+ */
+function applyGuidedFormToSchema(schemaId, fields, provenance) {
+  if (!dayLog || !dayLog.schemas) return false;
+  var schema = null;
+  for (var i = 0; i < dayLog.schemas.length; i++) {
+    if (dayLog.schemas[i].id === schemaId) { schema = dayLog.schemas[i]; break; }
+  }
+  if (!schema || schema.status !== "draft") return false;
+
+  var keys = Object.keys(fields || {});
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    if (!Object.prototype.hasOwnProperty.call(schema.fields, key)) continue;
+    var value = fields[key];
+    // A judgement field may be written here, because the worker authored or
+    // explicitly accepted it -- but never with a machine origin.
+    if (NEVER_AUTO_FILL.indexOf(key) !== -1) {
+      var origin = provenance && provenance[key] && provenance[key].origin;
+      if (origin !== "WORKER" && origin !== "SUGGESTION_ACCEPTED") continue;
+    }
+    schema.fields[key] = value;
+  }
+  schema.fieldProvenance = provenance || {};
+  saveCurrentDay();
+  emitStateChange("dayLog");
+  return true;
 }
 
 function buildSchemaContextFromText(text) {
