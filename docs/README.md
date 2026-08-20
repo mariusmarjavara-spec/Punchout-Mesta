@@ -37,9 +37,10 @@ code, `git log` and the CI run on `main` outrank every document here.
   state must guarantee independent of what stores it. Binding on any future
   datastore.
 - **[GUIDED_FORMS.md](GUIDED_FORMS.md)** — the guided SJA/RUH interaction
-  model, information classes, provenance and prefill sources. Verdict:
-  **GUIDED FORMS NOT READY** — built and tested, not yet mounted, no mobile
-  pass, no Prism run.
+  model, information classes, provenance, prefill sources, mobile acceptance
+  and Prism findings. Verdict: **GUIDED FORMS READY FOR PHYSICAL FIELD TEST**
+  — both flows reachable through the real worker path and proven on a
+  phone-sized real browser.
 - **[DATA_INVARIANTS.md](DATA_INVARIANTS.md)** — the ten invariants behind the
   central promise: from "Start day" until lock and handoff, normal failures must
   not silently destroy recorded work.

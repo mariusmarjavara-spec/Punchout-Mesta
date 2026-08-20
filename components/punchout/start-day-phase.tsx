@@ -12,6 +12,7 @@ import { Check, ChevronRight, ExternalLink, FileText, X, Languages } from "lucid
 import { getUnconfirmedRequiredSchemas } from "@/lib/pilot-ux/required-schemas.mjs";
 // @ts-ignore
 import { logUxEvent } from "@/lib/telemetry/ux-events.mjs";
+import { SchemaOverlayRouter } from "./schema-overlay-router";
 
 // UI text translations (simple NO/EN toggle, UI-only)
 const UI_TEXT = {
@@ -372,7 +373,9 @@ export function StartDayPhase() {
 
   // --- Schema Edit Overlay (during pre-day) ---
   if (isPreDay && isEditingSchema && motor && dayLog && uxState) {
-    return <SchemaEditOverlay dayLog={dayLog} uxState={uxState} motor={motor} />;
+    // SJA opens into the guided flow; other pre-day schemas keep the field
+    // renderer.
+    return <SchemaOverlayRouter dayLog={dayLog} uxState={uxState} motor={motor} />;
   }
 
   // --- Review state OR ACTIVE (pre): Show pre-day suggestions ---

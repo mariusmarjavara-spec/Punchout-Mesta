@@ -260,11 +260,24 @@ var recognition = null;
 // Voice hardening state
 var voiceSessionActive = false;  // Prevents overlapping recognition instances
 var voiceUnavailableReason = null;  // Last diagnosed reason voice could not run
+var voicePendingTranscript = "";  // Final speech held until the worker explicitly finishes
+var voiceStopRequested = false;   // True only for deliberate worker-controlled finish
+var voiceWatchdogExpired = false; // Distinguishes abandoned sessions from explicit finish
+/**
+ * When a Guided Form is on screen it CAPTURES voice, and the transcript must
+ * not also become a day-log entry.
+ *
+ * Without this, dictating an answer to "Hva kan ga galt?" would run
+ * submitEntry() and file a stray work entry in the middle of an SJA -- the
+ * worker would end the day with entries they never meant to write, and the
+ * guided answer would be the only place the text was supposed to land.
+ */
+var voiceCaptureTarget = null;
 var voiceResultHandled = false;  // Single commit guard per session
 var voiceState = "idle";         // "idle" | "listening" | "processing" | "error"
 var voiceError = null;           // Human-readable error string, auto-clears
 var voiceErrorTimer = null;      // Timer for auto-clearing voiceError
-var voiceAutoTimeout = null;     // 15s auto-timeout for field safety
+var voiceAutoTimeout = null;     // Long watchdog only for abandoned/stuck sessions
 
 // Schema error state (REACT_MODE)
 var schemaError = null;           // Human-readable validation error, auto-clears
@@ -378,6 +391,16 @@ var PRE_DAY_SCHEMAS = {
       konsekvens: { label: "Konsekvens", type: "string", required: true },  // Never auto-fill
       tiltak: { label: "Tiltak", type: "string", required: true },  // Never auto-fill
       arbeidsvarsling: { label: "Arbeidsvarsling", type: "enum", required: false, options: ["ingen", "enkel", "manuell", "full"] },
+      /**
+       * The work-warning PLAN reference, e.g. "24-184".
+       *
+       * Separate from `arbeidsvarsling` above, which is an enum describing the
+       * TYPE of warning. A plan number is a different fact and does not fit
+       * that enum; writing it there would have produced a value outside the
+       * declared options, which every adapter and the export contract treat as
+       * valid-by-declaration. Optional, because plenty of work has no plan.
+       */
+      arbeidsvarslingsplan: { label: "Arbeidsvarslingsplan", type: "string", required: false },
       godkjent: { label: "Godkjent", type: "boolean", required: true }
     }
   }
@@ -724,6 +747,8 @@ window.Motor = {
   diagnoseVoice: diagnoseVoice,
   buildSchemaContextFromText: buildSchemaContextFromText,
   buildGuidedFormContext: buildGuidedFormContext,
+  setVoiceCaptureTarget: setVoiceCaptureTarget,
+  buildExportPacket: buildExportPacket,
   getGuidedFormState: getGuidedFormState,
   setGuidedFormState: setGuidedFormState,
   applyGuidedFormToSchema: applyGuidedFormToSchema,
@@ -1311,20 +1336,22 @@ function setupVoice() {
 
   recognition.onresult = function (event) {
     // Single commit guard
-    if (voiceResultHandled) return;
+    if (voiceWatchdogExpired || voiceResultHandled) return;
 
     // isFinal enforcement — only process final results
-    var finalTranscript = null;
+    var finalTranscripts = [];
     for (var i = 0; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
-        finalTranscript = event.results[i][0].transcript;
-        break;
+        finalTranscripts.push(event.results[i][0].transcript);
       }
     }
-    if (!finalTranscript) return;
+    if (finalTranscripts.length === 0) return;
 
     // Clear auto-timeout — result received
-    if (voiceAutoTimeout) { clearTimeout(voiceAutoTimeout); voiceAutoTimeout = null; }
+    if (typeof performance !== "undefined" && recognition._voiceT0 && !recognition._voiceResultT0) {
+      recognition._voiceResultT0 = performance.now();
+      console.log("VOICE LATENCY (start\u2192first-result):", Math.round(recognition._voiceResultT0 - recognition._voiceT0) + "ms");
+    }
 
     voiceResultHandled = true;
     voiceState = "processing";
@@ -1335,7 +1362,11 @@ function setupVoice() {
       console.log("VOICE LATENCY (start\u2192result):", Math.round(performance.now() - recognition._voiceT0) + "ms");
     }
 
-    var transcript = finalTranscript;
+    var transcript = finalTranscripts.join(" ").trim();
+    if (!transcript) return;
+    voicePendingTranscript = voicePendingTranscript
+      ? (voicePendingTranscript + " " + transcript).trim()
+      : transcript;
 
     if (REACT_MODE) {
       // Emit transcript for React UI to display
@@ -1343,11 +1374,16 @@ function setupVoice() {
 
       var tCommit = typeof performance !== "undefined" ? performance.now() : 0;
 
-      if (appState === "NOT_STARTED") {
-        startDay(transcript);
-      } else {
-        var guessed = guessEntryType(transcript);
-        submitEntry(transcript, guessed);
+      // A Guided Form owns the transcript while it is open. The event above
+      // already delivered it; routing it into the day log as well would file
+      // an entry the worker never wrote.
+      if (!voiceCaptureTarget) {
+        if (appState === "NOT_STARTED") {
+          startDay(transcript);
+        } else {
+          var guessed = guessEntryType(transcript);
+          submitEntry(transcript, guessed);
+        }
       }
 
       // Latency: result → commit
@@ -1715,9 +1751,14 @@ function extractKjoretoyFromText(text) {
 
 // Extract context from input text for schema pre-fill
 function extractSchemaContext(text) {
+  var factual = buildSchemaContextFromText(text);
   return {
-    ordre: extractOrdreFromText(text),
-    kjoretoy: extractKjoretoyFromText(text)
+    ordre: factual.ordre,
+    kjoretoy: factual.kjoretoy,
+    sted: factual.sted,
+    ressurser: factual.ressurser,
+    arbeidsvarslingsplan: factual.arbeidsvarslingsplan,
+    activity: extractActivityFromText(text)
   };
 }
 
@@ -1764,9 +1805,11 @@ function createSchemaInstance(schemaKey, origin, context) {
   // Apply context-based pre-fill for neutral identification fields
   // These are always editable by the user before confirmation
   if (context) {
-    // SJA: pre-fill oppgave with ordre reference
-    if (schemaKey === "sja_preday" && context.ordre && fields.hasOwnProperty("oppgave")) {
-      fields.oppgave = "Oppdrag " + context.ordre;
+    // SJA: prefer the stated work, then order or place.
+    if (schemaKey === "sja_preday" && fields.hasOwnProperty("oppgave") && fields.oppgave === null) {
+      if (context.activity) fields.oppgave = context.activity;
+      else if (context.ordre) fields.oppgave = "Oppdrag " + context.ordre;
+      else if (context.sted) fields.oppgave = context.sted;
     }
 
     // Kjøretøysjekk: pre-fill kjøretøy ID
@@ -1779,6 +1822,11 @@ function createSchemaInstance(schemaKey, origin, context) {
     // Only filled when still empty, so a config default is never overwritten.
     if (context.sted && fields.hasOwnProperty("sted") && fields.sted === null) {
       fields.sted = context.sted;
+    }
+
+    if (context.arbeidsvarslingsplan && fields.hasOwnProperty("arbeidsvarslingsplan")
+        && fields.arbeidsvarslingsplan === null) {
+      fields.arbeidsvarslingsplan = context.arbeidsvarslingsplan;
     }
 
     // `oppgave` prefers the order reference when one was recognised, and
@@ -1842,6 +1890,7 @@ function detectRunningSchema(text) {
 function startDay(inputText) {
   var now = new Date();
   var text = inputText || "";
+  var schemaContext = extractSchemaContext(text);
 
   dayLog = {
     date: now.toISOString().split("T")[0],
@@ -1861,6 +1910,7 @@ function startDay(inputText) {
      * because the step index is HERE, not in a React hook.
      */
     guidedForms: {},
+    startContext: schemaContext,
     phase: "pre",     // "pre" | "active" | "ending" — always start in pre-day phase
     status: "ACTIVE",
     mainTimeHandled: false  // Flag: main timesheet has been handled at end of day
@@ -1868,9 +1918,6 @@ function startDay(inputText) {
 
   // Detect pre-day schemas from input text
   var preDayKeys = detectPreDaySchemas(text);
-
-  // Extract context for schema pre-fill (ordre, kjøretøy, etc.)
-  var schemaContext = extractSchemaContext(text);
 
   if (REACT_MODE) {
     // Always create ALL available pre-day schemas as interactive cards in Start screen
@@ -5425,6 +5472,18 @@ function buildExportPacket(log) {
       type: s.type,
       status: s.status,
       fields: s.fields,
+      /**
+       * Where each value came from: SYSTEM, INFERRED_CONFIRMED, WORKER or
+       * SUGGESTION_ACCEPTED.
+       *
+       * Carried through export because a finished form loses the distinction
+       * otherwise, and it is exactly what a reviewer needs: a risk the worker
+       * wrote and a risk the worker agreed to are different facts, and neither
+       * is the same as a location Punchout filled in. Null on schemas completed
+       * through the plain field editor, which is honest -- that path records no
+       * origin at all.
+       */
+      fieldProvenance: s.fieldProvenance || null,
       createdAt: s.createdAt,
       confirmedAt: s.confirmedAt || null
     };
@@ -6349,9 +6408,9 @@ function extractStedFromText(text) {
 function backfillDraftSchemasFromText(text) {
   if (!dayLog || !dayLog.schemas || !dayLog.schemas.length) return;
   var context = buildSchemaContextFromText(text);
-  if (!context.sted && !context.ressurser && !context.ordre) return;
+  if (!context.sted && !context.ressurser && !context.ordre && !context.arbeidsvarslingsplan) return;
 
-  var FACTUAL = ["sted", "oppgave", "ressurser", "kjoretoy"];
+  var FACTUAL = ["sted", "oppgave", "ressurser", "kjoretoy", "arbeidsvarslingsplan"];
   for (var i = 0; i < dayLog.schemas.length; i++) {
     var schema = dayLog.schemas[i];
     if (!schema || schema.status !== "draft" || !schema.fields) continue;
@@ -6363,6 +6422,9 @@ function backfillDraftSchemasFromText(text) {
       if (schema.fields[key] !== null) continue;
 
       if (key === "sted" && context.sted) schema.fields.sted = context.sted;
+      else if (key === "arbeidsvarslingsplan" && context.arbeidsvarslingsplan) {
+        schema.fields.arbeidsvarslingsplan = context.arbeidsvarslingsplan;
+      }
       else if (key === "kjoretoy" && context.kjoretoy) schema.fields.kjoretoy = context.kjoretoy;
       else if (key === "ressurser" && context.ressurser) schema.fields.ressurser = context.ressurser;
       else if (key === "oppgave") {
@@ -6399,6 +6461,17 @@ function buildGuidedFormContext() {
     crew: null
   };
   if (!dayLog) return context;
+
+  var startContext = dayLog.startContext || null;
+  if (startContext) {
+    if (!context.activity && startContext.activity) context.activity = startContext.activity;
+    if (!context.location && startContext.sted) context.location = startContext.sted;
+    if (!context.machine && startContext.kjoretoy) context.machine = startContext.kjoretoy;
+    if (!context.orderReference && startContext.ordre) context.orderReference = startContext.ordre;
+    if (!context.workWarningPlan && startContext.arbeidsvarslingsplan) {
+      context.workWarningPlan = startContext.arbeidsvarslingsplan;
+    }
+  }
 
   // The most recent entry that yielded a fact wins. A worker who has moved to
   // a new road since this morning should not have this morning's road proposed
@@ -6471,6 +6544,18 @@ function extractWorkWarningPlan(text) {
 }
 
 /** Read persisted Guided Form progress. Null when the form has not started. */
+/**
+ * Claim or release voice capture for a Guided Form.
+ *
+ * Set while the form is mounted, cleared when it closes. Deliberately a single
+ * slot rather than a stack: two forms cannot be open at once, and a stack would
+ * invite a leak that silently swallows dictation for the rest of the day.
+ */
+function setVoiceCaptureTarget(target) {
+  voiceCaptureTarget = target || null;
+  return voiceCaptureTarget;
+}
+
 function getGuidedFormState(formId) {
   if (!dayLog || !dayLog.guidedForms) return null;
   return dayLog.guidedForms[formId] || null;
@@ -6533,6 +6618,7 @@ function buildSchemaContextFromText(text) {
   return {
     ordre: ordreMatch ? ordreMatch[1] : null,
     sted: extractStedFromText(text),
+    arbeidsvarslingsplan: extractWorkWarningPlan(text),
     ressurser: ressurser && ressurser.length ? ressurser : null,
     kjoretoy: ressurser && ressurser.length ? ressurser[0] : null
   };

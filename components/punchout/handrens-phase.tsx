@@ -1,7 +1,7 @@
 "use client";
 
 import { useMotorState, useMotor, type UnresolvedItem } from "@/hooks/use-motor-state";
-import { SchemaEditOverlay } from "./start-day-phase";
+import { SchemaOverlayRouter } from "./schema-overlay-router";
 import { cn } from "@/lib/utils";
 import {
   Check,
@@ -65,7 +65,10 @@ export function HandrensPhase() {
   // Schema edit overlay — shown when user edits a schema (e.g. RUH fields) from håndrens
   const isEditingSchema = uxState?.activeOverlay === "schema_edit" && uxState?.schemaId;
   if (isEditingSchema && dayLog && uxState) {
-    return <SchemaEditOverlay dayLog={dayLog} uxState={uxState} motor={motor} />;
+    // RUH opens into the guided flow; other schema types keep the field
+    // renderer. The router owns that decision so the two phases that show
+    // this overlay cannot quietly stop matching each other.
+    return <SchemaOverlayRouter dayLog={dayLog} uxState={uxState} motor={motor} />;
   }
 
   const unresolvedItems: UnresolvedItem[] = motor.getUnresolvedItems() || [];

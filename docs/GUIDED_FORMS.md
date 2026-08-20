@@ -1,10 +1,19 @@
 # Guided Forms — SJA and RUH
 
-**Status:** CURRENT · **Date:** 2026-08-20 · **Commits:** `2ea428f`, `173e229`
+**Status:** CURRENT · **Date:** 2026-08-20
 
-**Verdict: `GUIDED FORMS NOT READY` for physical field test.** The domain core
-and the mobile surface are built, tested and falsified. Three blockers remain,
-listed at the end. None of them is a design question.
+**Verdict: `GUIDED FORMS READY FOR PHYSICAL FIELD TEST`.**
+
+Both SJA and RUH are reachable through the real worker path and proven end to
+end on a phone-sized real browser. The three blockers that produced the earlier
+NOT READY are closed, and both non-blockers with them.
+
+The gate is the reachable worker flow, not the engine tests: 19 guided SJA
+checks inside `browser-field-readiness.mjs` (44 total) and 17 in
+`browser-guided-ruh.mjs`, each starting from provisioning and ending at a
+confirmed schema. What remains unproven is what a browser cannot prove — real
+touch, real keyboards, real Safari, real weather. That is what the physical
+field test is for.
 
 ---
 
@@ -111,23 +120,107 @@ rule left every test green. The guard is now tested directly against a
 constructed step that does ask for a judgement prefill, because flows are data
 anyone can edit and the rule must hold against a bad flow.
 
-## Blockers
+## How it is reached
 
-1. **Not mounted.** `GuidedForm` is not yet wired into the day flow, so no
-   worker can reach it. `start-day-phase.tsx` still opens the old schema-edit
-   overlay. This is the blocker that makes the verdict NOT READY.
-2. **No real-browser mobile pass.** `browser-field-readiness.mjs` does not yet
-   cover the guided flow: prefill acceptance, editing a prefill, risk
-   accept/remove/add, back navigation, interruption/resume, refresh, review,
-   confirmation, export persistence.
-3. **No Prism run.** The six personas have not been simulated against this
-   flow. Confirmation fatigue and commitment-before-trust are the specific
-   risks worth testing, and neither is measurable from unit tests.
+**SJA** — pre-day screen, the SJA card, *Fyll ut*.
 
-Two smaller items, neither blocking: the work-warning plan needs an optional
-SJA field to be visible in the form rather than only in context, and export
-provenance (`schema.fieldProvenance`) is written but not yet asserted to
-survive lock → sign → Relay → adapter.
+**RUH** — a Hendelse entry creates the RUH draft, then end of day, håndrens,
+*Behandle*, *Rediger RUH-felt*.
+
+That RUH path was found by testing rather than assumed. A first attempt added
+an inline *"Vil du registrere dette som RUH?"* prompt after logging an incident,
+on the theory that `pendingRuhQuestion` simply had no React renderer. It does
+have no React renderer — but the reason is deliberate, and stated in motor.js:
+in React mode inline blocking is removed and decisions are deferred to
+end-of-day. A Hendelse creates the draft directly. The prompt was reverted; it
+would have duplicated a decision the app has purposely moved off the worker's
+critical path.
+
+## Mobile acceptance
+
+`browser-field-readiness.mjs`, 44 checks, iPhone 13 viewport, real Chromium:
+
+| Proven | |
+|---|---|
+| One prompt, not a form | later prompts absent from the DOM |
+| Reuse | *Punchout oppfattet: Grøfterensk*, then RV92 km 14–18, then plan 24-184 |
+| Judgement boundary | zero *Stemmer* buttons on the risk step; zero pre-selected suggestions |
+| Touch targets | accept button ≥ 44px |
+| No horizontal scroll | at every step and at review |
+| Interruption | reload mid-flow returns to the same step index |
+| Resume | reload lands back **inside** the form, not on the schema list |
+| Review | authored, *Punchout fylte ut* and *Registrert automatisk* kept apart |
+| Confirmation | explicit *Bekreft SJA* |
+| What landed | `sted` and `arbeidsvarslingsplan` in the schema, with origins |
+
+`browser-guided-ruh.mjs`, 17 checks, same viewport, its own script:
+
+Reachability from håndrens · narrative prompt first · hint cues dropped ·
+follow-up raised on a thin narrative · *Ingen tiltak var nødvendig* reachable ·
+explicit *Bekreft RUH* · worker's words stored with `WORKER` origin · zero
+console errors.
+
+It is a separate script on purpose. Logging a Hendelse adds an unresolved item,
+which shifted the håndrens indices `browser-field-readiness.mjs` depends on.
+Putting RUH there would have meant changing an existing gate's expectations to
+accommodate a new feature. Two scripts, two independent pieces of evidence,
+neither weakened.
+
+## Prism findings
+
+Prism's deterministic rule engine over both guided flows, all six personas plus
+skeptic and professional. No LLM: no `ANTHROPIC_API_KEY` is configured, so this
+is **Signal-level evidence, not a completed Prism Review** — the same boundary
+the earlier Punchout evaluation recorded.
+
+**Severity ceiling came back `low` for every signal on both flows. No P0 or P1.**
+
+The pattern that did emerge is the one the mission named. `Trust | strong` for
+the low-digital-confidence, documentation-conscious and supervisor personas, and
+for the skeptic, on guided SJA. `Navigation | strong` almost everywhere — a
+guided flow is more screens than a form. `Recovery | strong` for the low-digital
+and distracted personas.
+
+**Acted on:** the prefill panel said WHAT Punchout inferred and never WHERE
+FROM, so agreeing to it was an act of faith. It now reads *"Punchout oppfattet
+fra det du skrev tidligere i dag"*. Naming the source turns "trust this" into
+"check this" — the difference between a prefill a worker signs and one a worker
+verifies.
+
+**Not acted on:** the Navigation signals. A guided flow legitimately has more
+screens than a form, the ceiling is low, and collapsing steps to reduce the
+count would undo the thing the flow exists to do. Recorded rather than fixed.
+
+## Non-blockers, closed
+
+**Work-warning plan.** `arbeidsvarslingsplan` is now its own optional string
+field on `sja_preday`, beside the `arbeidsvarsling` enum rather than inside it.
+Writing `24-184` into a field declared as `ingen|enkel|manuell|full` would have
+produced a value outside its own declared options, which every adapter and the
+export contract treat as valid by declaration.
+
+**Provenance through the chain.** `buildExportPacket` picks schema keys
+explicitly and was dropping `fieldProvenance`; it now carries it, and
+`relay-delivery-chain.mjs` asserts `WORKER`, `INFERRED_CONFIRMED` and
+`SUGGESTION_ACCEPTED` all arrive at the Relay intact.
+
+That second one produced the session's most useful lesson, twice over. The relay
+assertion alone could not catch the bug: that script posts a hand-built packet
+straight to `/api/export`, so motor's export mapper is never exercised there —
+reverting the mapper left it green. A second case now drives `buildExportPacket`
+directly. This is the same vacuous-test class as the judgement-guard tests
+earlier, and both were found only by reverting the guard and watching what
+stayed green.
+
+## Known limitations
+
+- Chromium's iPhone emulation is not a phone. Real touch, real keyboards, real
+  Safari and real network transitions remain unverified.
+- Prism evidence is Signal-level, not a completed Review.
+- The guided flow covers SJA and RUH. `kjoretoyssjekk` and every other schema
+  type still open the generic field editor, which is unchanged.
+- `fieldProvenance` is null for anything completed through that editor. Honest:
+  that path records no origin.
 
 ## Not built, deliberately
 

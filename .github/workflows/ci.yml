@@ -171,6 +171,13 @@ jobs:
       - name: Browser field readiness (iPhone viewport, main hours, relay)
         run: node lib/regression/browser-field-readiness.mjs
 
+      # Guided RUH gets its own script rather than more steps in the one above:
+      # logging a Hendelse creates an extra unresolved item, which shifts the
+      # håndrens indices that script depends on. Two scripts, two independent
+      # pieces of evidence, neither gate weakened to accommodate the other.
+      - name: Browser guided RUH (iPhone viewport, real håndrens path)
+        run: node lib/regression/browser-guided-ruh.mjs
+
   # ── The deployable artifact ───────────────────────────────────────────────
   build:
     name: "Build and standalone artifact"

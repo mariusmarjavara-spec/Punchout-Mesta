@@ -72,7 +72,11 @@ describe("GuidedForm", () => {
   it("presents an inference as something to agree with, not as a filled field", () => {
     renderForm({ flowId: "sja" });
 
-    expect(screen.getByText("Punchout oppfattet:")).toBeInTheDocument();
+    // The panel must name its SOURCE, not just its value. Prism's Trust signal
+    // came back strong for the low-digital, documentation-conscious and
+    // supervisor personas precisely because it did not.
+    expect(screen.getByText(/Punchout oppfattet/)).toBeInTheDocument();
+    expect(screen.getByText(/fra det du skrev tidligere i dag/)).toBeInTheDocument();
     expect(screen.getByText("Grøfterensk")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stemmer" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rediger" })).toBeInTheDocument();

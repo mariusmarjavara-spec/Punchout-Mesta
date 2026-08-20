@@ -195,7 +195,18 @@ export function GuidedForm({
       {/* An inference, shown as something to agree with rather than a filled box. */}
       {step.prefill && (
         <div className="space-y-3 rounded-lg border border-border p-4">
-          <p className="text-sm text-muted-foreground">Punchout oppfattet:</p>
+          {/* Prism ran the six field personas over this flow. Severity ceiling
+              came back low throughout — no P0/P1 — but Trust signalled STRONG
+              for the low-digital-confidence, documentation-conscious and
+              supervisor personas, and for the skeptic. The panel said WHAT
+              Punchout inferred and never WHERE FROM, so agreeing to it was an
+              act of faith. Naming the source turns "trust this" into "check
+              this", which is the difference between a prefill a worker signs
+              and a prefill a worker verifies. */}
+          <p className="text-sm text-muted-foreground">
+            Punchout oppfattet{" "}
+            <span className="italic">fra det du skrev tidligere i dag</span>:
+          </p>
           <p className="text-lg font-medium">{step.prefill.value}</p>
           <div className="flex gap-3">
             <button
