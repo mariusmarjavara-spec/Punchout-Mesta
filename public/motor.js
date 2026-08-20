@@ -1353,9 +1353,7 @@ function setupVoice() {
       console.log("VOICE LATENCY (start\u2192first-result):", Math.round(recognition._voiceResultT0 - recognition._voiceT0) + "ms");
     }
 
-    voiceResultHandled = true;
-    voiceState = "processing";
-    emitStateChange("voiceState");
+    // Keep collecting final chunks until the worker explicitly finishes.
 
     // Latency: start → result
     if (typeof performance !== "undefined" && recognition._voiceT0) {
@@ -1369,8 +1367,7 @@ function setupVoice() {
       : transcript;
 
     if (REACT_MODE) {
-      // Emit transcript for React UI to display
-      window.dispatchEvent(new CustomEvent("voice-transcript", { detail: transcript }));
+      return;
 
       var tCommit = typeof performance !== "undefined" ? performance.now() : 0;
 
@@ -1444,6 +1441,9 @@ function setupVoice() {
     }
 
     if (REACT_MODE) {
+      if (event.error === "aborted" && voiceStopRequested) {
+        return;
+      }
       voiceResultHandled = true; // Prevent silent-failure handler in onend
       isListening = false;
       if (msg) {
@@ -1479,6 +1479,49 @@ function setupVoice() {
 
     // Always release session lock
     voiceSessionActive = false;
+
+    if (REACT_MODE && voiceStopRequested) {
+      var transcript = (voicePendingTranscript || "").trim();
+      voiceStopRequested = false;
+      if (isListening) {
+        isListening = false;
+        emitStateChange("isListening");
+      }
+      if (!transcript) {
+        voiceState = "error";
+        voiceError = "H\u00f8rte ingenting \u2013 pr\u00f8v igjen";
+        if (voiceErrorTimer) clearTimeout(voiceErrorTimer);
+        voiceErrorTimer = setTimeout(function () {
+          voiceState = "idle";
+          voiceError = null;
+          emitStateChange("voiceState");
+        }, 3000);
+        emitStateChange("voiceState");
+        voicePendingTranscript = "";
+        return;
+      }
+      voiceResultHandled = true;
+      if (typeof performance !== "undefined" && recognition._voiceT0) {
+        console.log("VOICE LATENCY (start\u2192result):", Math.round(performance.now() - recognition._voiceT0) + "ms");
+      }
+      window.dispatchEvent(new CustomEvent("voice-transcript", { detail: transcript }));
+      var tCommit = typeof performance !== "undefined" ? performance.now() : 0;
+      if (!voiceCaptureTarget) {
+        if (appState === "NOT_STARTED") {
+          startDay(transcript);
+        } else {
+          var guessed = guessEntryType(transcript);
+          submitEntry(transcript, guessed);
+        }
+      }
+      if (tCommit) {
+        console.log("VOICE LATENCY (result\u2192commit):", Math.round(performance.now() - tCommit) + "ms");
+      }
+      voicePendingTranscript = "";
+      voiceState = "idle";
+      emitStateChange("voiceState");
+      return;
+    }
 
     if (REACT_MODE) {
       // Only show "Hørte ingenting" if we were genuinely listening for a while
@@ -1546,6 +1589,9 @@ function toggleVoiceReact() {
 
   // If already listening or session active, stop — onend handles cleanup
   if (isListening || voiceSessionActive) {
+    voiceStopRequested = true;
+    voiceState = "processing";
+    emitStateChange("voiceState");
     recognition.stop();
     return;
   }
@@ -1560,16 +1606,20 @@ function toggleVoiceReact() {
   // Reset per-session guards
   voiceResultHandled = false;
   voiceSessionActive = true;
+  voicePendingTranscript = "";
+  voiceStopRequested = false;
+  voiceWatchdogExpired = false;
 
   try {
     recognition.start();
     // NOTE: isListening is set in onstart, NOT here
     // Auto-timeout: stop mic after 15s if no result (field safety)
     voiceAutoTimeout = setTimeout(function () {
-      if (voiceSessionActive && !voiceResultHandled) {
+      if (voiceSessionActive && !voiceResultHandled && !voiceStopRequested) {
+        voiceWatchdogExpired = true;
         try { recognition.stop(); } catch (_) {}
       }
-    }, 15000);
+    }, 120000);
   } catch (e) {
     voiceSessionActive = false;
     voiceState = "error";
