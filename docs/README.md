@@ -24,9 +24,15 @@ code, `git log` and the CI run on `main` outrank every document here.
 
 ## CURRENT
 
-- **[MATURITY_ASSESSMENT_2026-08-19.md](MATURITY_ASSESSMENT_2026-08-19.md)** — the
-  authoritative readiness verdict: **CONDITIONALLY_PILOT_READY**, measured at
-  `c5f5712` with CI run 32294196355 green. **Read this first.**
+- **[PILOT_HARDENING_REPORT_2026-08-20.md](PILOT_HARDENING_REPORT_2026-08-20.md)** —
+  the authoritative readiness verdict: **PILOT_READY for the in-repo scope**,
+  measured at `cdc0f53` with CI run 32342865908 green (7/7 jobs). Keeps
+  CI-verified, deployment-verified and physical-device-verified strictly apart;
+  the last two are empty. **Read this first.**
+- **[MATURITY_ASSESSMENT_2026-08-19.md](MATURITY_ASSESSMENT_2026-08-19.md)** —
+  the prior verdict, CONDITIONALLY_PILOT_READY at `c5f5712`. Still current for
+  the dimensions the hardening mission did not touch (scale, cost, DM workflow
+  measurement); superseded on operability, CI topology and persistence.
 - **[PERSISTENCE_CONTRACT.md](PERSISTENCE_CONTRACT.md)** — C1–C8, what canonical
   state must guarantee independent of what stores it. Binding on any future
   datastore.
