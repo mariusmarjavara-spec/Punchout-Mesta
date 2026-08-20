@@ -9,6 +9,14 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
+**npm, not pnpm or yarn.** `package-lock.json` is the only lockfile the project
+maintains, and CI installs with `npm ci` from it. A `pnpm-lock.yaml` used to sit
+beside it containing nothing but a `lockfileVersion` header and two settings —
+no packages at all — which meant `pnpm install` would have resolved the whole
+dependency graph fresh instead of reproducing CI's. It has been removed rather
+than kept as a courtesy, because an empty lockfile is worse than none: it makes
+an unsupported package manager look supported.
+
 Cold, an un-provisioned browser serves the static demo config
 (`public/punchout-config.js`, Mesta-shaped). To see a real organization's
 compiled Runtime, publish one and provision a device — see
@@ -18,12 +26,22 @@ compiled Runtime, publish one and provision a device — see
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `PUNCHOUT_ADMIN_TOKEN` | Yes, for any admin action | Bearer token for every admin-gated route (`/api/runtime/*`, `/api/devices/*`, `/api/operations-center`, `/api/export` GET, `/api/telemetry` GET). Unset = every admin request is rejected (fail closed by design, see `lib/backend/auth.mjs`) — never optional in a real deploy. |
+| `PUNCHOUT_ADMIN_TOKEN` | Yes, for any admin action | Bearer token for every admin-gated route (`/api/runtime/*`, `/api/devices/*`, `/api/operations-center`, `/api/relay`, `/api/day-trace`, `/api/export` GET, `/api/telemetry` GET). Unset = every admin request is rejected (fail closed by design, see `lib/backend/auth.mjs`) — never optional in a real deploy. |
 | `PUNCHOUT_DATA_DIR` | Yes, in production | Where the single backend-state JSON file (Runtime history, export/telemetry log, device registry) is persisted. Must point at a real, persistent volume in production — a serverless/ephemeral filesystem loses all state between invocations (this is why Fly.io/Railway were chosen over Vercel; see [docs/deployment-decision.md](docs/deployment-decision.md)). |
 | `PORT` | No (defaults to 3000) | Also used internally by `app/layout.tsx` to reach the app's own `/api/runtime/active` route via a same-process HTTP call — must match whatever port the server actually listens on. |
 | `NODE_ENV` | No | Standard Next.js production/dev switch. |
 
-No `.env.example` is checked in on purpose: `PUNCHOUT_ADMIN_TOKEN` is a secret and must never be committed, even as a placeholder value someone might copy-paste into production by accident.
+`.env.example` lists every variable the code reads, with empty values. It used
+to document only the two PostHog keys — omitting both variables above, which are
+the ones that decide whether the admin surface is reachable at all and where a
+pilot's workdays are stored.
+
+This paragraph previously said no `.env.example` was checked in "on purpose",
+on the reasoning that a committed placeholder for `PUNCHOUT_ADMIN_TOKEN` could
+be copy-pasted into production. The file was in fact checked in the whole time,
+so the README and the repository disagreed. The concern behind it was sound and
+is preserved literally: every value in that file is empty, so there is nothing
+to copy-paste, and no secret is committed even in placeholder form.
 
 ## Scripts
 
