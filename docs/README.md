@@ -36,6 +36,10 @@ code, `git log` and the CI run on `main` outrank every document here.
 - **[PERSISTENCE_CONTRACT.md](PERSISTENCE_CONTRACT.md)** — C1–C8, what canonical
   state must guarantee independent of what stores it. Binding on any future
   datastore.
+- **[GUIDED_FORMS.md](GUIDED_FORMS.md)** — the guided SJA/RUH interaction
+  model, information classes, provenance and prefill sources. Verdict:
+  **GUIDED FORMS NOT READY** — built and tested, not yet mounted, no mobile
+  pass, no Prism run.
 - **[DATA_INVARIANTS.md](DATA_INVARIANTS.md)** — the ten invariants behind the
   central promise: from "Start day" until lock and handoff, normal failures must
   not silently destroy recorded work.
