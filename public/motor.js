@@ -8,7 +8,18 @@ var STORAGE_KEY_HISTORY = "yournal_history";
 var STORAGE_KEY_TELEMETRY = "yournal_telemetry";
 
 // Fields that must NEVER be auto-filled (user responsibility)
-var NEVER_AUTO_FILL = ["konsekvens", "tiltak", "forslag_tiltak", "arsak", "vurdering"];
+/**
+ * Fields a machine must never populate, because answering them IS the safety
+ * work rather than a record of it.
+ *
+ * `risiko` and `godkjent` were added 2026-08-20. Nothing filled them, so no
+ * behaviour changes — but the boundary was being enforced by the absence of
+ * code rather than by a rule, and P1-B adds prefill code for the first time.
+ * A risk assessment inferred from a sentence about ditch clearing would be a
+ * machine's guess wearing a worker's signature, and `godkjent` is an approval:
+ * the one field whose whole meaning is that a person decided.
+ */
+var NEVER_AUTO_FILL = ["konsekvens", "tiltak", "forslag_tiltak", "arsak", "vurdering", "risiko", "godkjent"];
 
 // ============================================================
 // ADMIN CONFIGURATION (data, not logic)
@@ -248,6 +259,7 @@ var recognition = null;
 
 // Voice hardening state
 var voiceSessionActive = false;  // Prevents overlapping recognition instances
+var voiceUnavailableReason = null;  // Last diagnosed reason voice could not run
 var voiceResultHandled = false;  // Single commit guard per session
 var voiceState = "idle";         // "idle" | "listening" | "processing" | "error"
 var voiceError = null;           // Human-readable error string, auto-clears
@@ -580,6 +592,11 @@ function getSnapshot() {
     voiceError: voiceError,
     schemaError: schemaError,
     voiceSupported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+    // Distinct from voiceSupported, which only asks whether the API object
+    // exists. On an insecure page the API exists and cannot be used, which is
+    // exactly the case that produced a dead button in the field.
+    voiceAvailable: diagnoseVoice().available,
+    voiceUnavailableReason: voiceUnavailableReason,
     editingIndex: editingIndex,
     outboxStatus: getOutboxStatus(),
     exportEnabled: !!ADMIN_CONFIG.exportEndpoint,
@@ -704,6 +721,8 @@ window.Motor = {
 
   // Voice
   toggleVoice: toggleVoice,
+  diagnoseVoice: diagnoseVoice,
+  buildSchemaContextFromText: buildSchemaContextFromText,
 
   // Export
   syncExports: syncExports,
@@ -1206,6 +1225,60 @@ function tryIgnoreError() {
 // --- Voice (Web Speech API, continuous mode, one-result-per-click) ---
 var voiceContext = "active";  // "start" or "active" - determines where voice goes
 
+/**
+ * Why voice is or is not available, specifically enough to tell a worker what
+ * to do about it.
+ *
+ * P1-A: on a physical phone the mic button did nothing at all -- no message, no
+ * visual change. `voiceSupported` could not explain that, because it only asks
+ * whether the API object exists.
+ *
+ * The case that matters in the field is INSECURE_CONTEXT. Chrome and Samsung
+ * Internet expose SpeechRecognition over plain http and then refuse to start
+ * it, so a phone opening the app at http://<lan-ip>:3000 sees a button that
+ * looks functional and is not. "Browser doesn't support speech" would be the
+ * wrong explanation and would send someone looking for a different phone.
+ *
+ * Returns a reason code and a message written for the person holding the
+ * phone, not for a developer reading a console.
+ */
+function diagnoseVoice() {
+  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  // Secure context is checked FIRST. On an insecure page the API may still be
+  // present, so asking about support first gives the wrong answer.
+  // `location` is guarded rather than assumed: motor.js is also loaded into a
+  // bare vm sandbox by the regression suite, where a ReferenceError here would
+  // take down the very check meant to explain a failure.
+  var loc = typeof location !== "undefined" ? location : null;
+  var secure = typeof window.isSecureContext === "boolean"
+    ? window.isSecureContext
+    : !!(loc && (loc.protocol === "https:" || loc.hostname === "localhost" || loc.hostname === "127.0.0.1"));
+
+  if (!secure) {
+    return {
+      available: false,
+      reason: "INSECURE_CONTEXT",
+      message: "Tale krever sikker tilkobling (https). Siden er apnet over http, sa nettleseren blokkerer mikrofonen. Skriv inn i stedet, eller apne appen pa en https-adresse."
+    };
+  }
+  if (!SpeechRecognition) {
+    return {
+      available: false,
+      reason: "UNSUPPORTED_BROWSER",
+      message: "Denne nettleseren stotter ikke taleinput. Skriv inn i stedet, eller prov Chrome."
+    };
+  }
+  if (!navigator.mediaDevices) {
+    return {
+      available: false,
+      reason: "NO_MICROPHONE_API",
+      message: "Nettleseren gir ikke tilgang til mikrofon her. Skriv inn i stedet."
+    };
+  }
+  return { available: true, reason: "AVAILABLE", message: null };
+}
+
 function setupVoice() {
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
@@ -1317,6 +1390,13 @@ function setupVoice() {
       msg = "Mikrofontilgang avsl\u00e5tt";
     } else if (event.error === "network") {
       msg = "Nettverksfeil \u2013 trenger nett for tale";
+    } else if (event.error === "service-not-allowed") {
+      // What Chrome reports when the page is not a secure context, and the
+      // most likely error on a phone opening the app over http. It previously
+      // fell through to "Feil: service-not-allowed" -- visible and useless.
+      msg = "Tale er blokkert av nettleseren. Dette skjer nar siden ikke er https. Skriv inn i stedet.";
+    } else if (event.error === "audio-capture") {
+      msg = "Fant ingen mikrofon. Skriv inn i stedet.";
     } else if (event.error === "aborted") {
       msg = null; // User-initiated stop, not a real error
     } else {
@@ -1404,7 +1484,24 @@ function toggleVoiceReact() {
     setupVoice();
   }
   if (!recognition) {
-    return; // Browser doesn't support speech
+    // P1-A: this used to be a bare `return`. Pressing the mic did nothing --
+    // no message, no state change, no event -- so the only signal a worker got
+    // was that the app was broken. A voice action that cannot run must still
+    // say why; silence is never an acceptable response to a deliberate press.
+    var diagnosis = diagnoseVoice();
+    voiceState = "error";
+    voiceError = diagnosis.message || "Tale er ikke tilgjengelig her.";
+    voiceUnavailableReason = diagnosis.reason;
+    if (voiceErrorTimer) clearTimeout(voiceErrorTimer);
+    // Held longer than a transient error: this one asks the reader to change
+    // something, and three seconds is not enough to read it and act.
+    voiceErrorTimer = setTimeout(function () {
+      voiceState = "idle";
+      voiceError = null;
+      emitStateChange("voiceState");
+    }, 8000);
+    emitStateChange("voiceState");
+    return;
   }
 
   // If already listening or session active, stop — onend handles cleanup
@@ -1671,6 +1768,25 @@ function createSchemaInstance(schemaKey, origin, context) {
     // Kjøretøysjekk: pre-fill kjøretøy ID
     if (schemaKey === "kjoretoyssjekk" && context.kjoretoy && fields.hasOwnProperty("kjoretoy")) {
       fields.kjoretoy = context.kjoretoy;
+    }
+
+    // P1-B: a place stated in the entry is a factual field, and re-typing it
+    // is exactly the duplication a worker standing on a road will skip.
+    // Only filled when still empty, so a config default is never overwritten.
+    if (context.sted && fields.hasOwnProperty("sted") && fields.sted === null) {
+      fields.sted = context.sted;
+    }
+
+    // `oppgave` prefers the order reference when one was recognised, and
+    // otherwise falls back to the place — both are identification, neither is
+    // an assessment. Left null when neither resolves rather than guessed at.
+    if (fields.hasOwnProperty("oppgave") && fields.oppgave === null) {
+      if (context.ordre) fields.oppgave = "Oppdrag " + context.ordre;
+      else if (context.sted) fields.oppgave = context.sted;
+    }
+
+    if (context.ressurser && fields.hasOwnProperty("ressurser") && fields.ressurser === null) {
+      fields.ressurser = context.ressurser;
     }
   }
 
@@ -2030,7 +2146,7 @@ function submitEntry(entryText, entryType) {
 
   var runningSchemaKey = detectRunningSchema(text);
   if (runningSchemaKey) {
-    var newSchema = createSchemaInstance(runningSchemaKey, "running");
+    var newSchema = createSchemaInstance(runningSchemaKey, "running", buildSchemaContextFromText(text));
     if (newSchema) {
       if (newSchema.fields.beskrivelse !== undefined) {
         newSchema.fields.beskrivelse = text;
@@ -2039,6 +2155,10 @@ function submitEntry(entryText, entryType) {
       dayLog.schemas.push(newSchema);
     }
   }
+
+  // Pre-day schemas exist before any entry is written, so they can only be
+  // filled from entries that come later.
+  backfillDraftSchemasFromText(text);
 
   if (type === "hendelse" && ADMIN_CONFIG.ruhTriggerTypes.indexOf("hendelse") !== -1) {
     pendingRuhQuestion = { entryIndex: entryIndex };
@@ -2087,7 +2207,7 @@ function processEntryOrchestration(entryIndex, text, type) {
 
   var runningSchemaKey = detectRunningSchema(text);
   if (runningSchemaKey) {
-    var newSchema = createSchemaInstance(runningSchemaKey, "running");
+    var newSchema = createSchemaInstance(runningSchemaKey, "running", buildSchemaContextFromText(text));
     if (newSchema) {
       if (newSchema.fields.beskrivelse !== undefined) {
         newSchema.fields.beskrivelse = text;
@@ -2096,6 +2216,10 @@ function processEntryOrchestration(entryIndex, text, type) {
       dayLog.schemas.push(newSchema);
     }
   }
+
+  // Pre-day schemas exist before any entry is written, so they can only be
+  // filled from entries that come later.
+  backfillDraftSchemasFromText(text);
 
   if (type === "hendelse" && ADMIN_CONFIG.ruhTriggerTypes.indexOf("hendelse") !== -1) {
     var ruhSchema = {
@@ -4958,7 +5082,7 @@ function confirmStructuredEntry(text, type, parsed) {
   // 3. Check for running schema triggers (same as submitEntry)
   var runningSchemaKey = detectRunningSchema(text);
   if (runningSchemaKey) {
-    var newSchema = createSchemaInstance(runningSchemaKey, "running");
+    var newSchema = createSchemaInstance(runningSchemaKey, "running", buildSchemaContextFromText(text));
     if (newSchema) {
       if (newSchema.fields.beskrivelse !== undefined) {
         newSchema.fields.beskrivelse = text;
@@ -4967,6 +5091,10 @@ function confirmStructuredEntry(text, type, parsed) {
       dayLog.schemas.push(newSchema);
     }
   }
+
+  // Pre-day schemas exist before any entry is written, so they can only be
+  // filled from entries that come later.
+  backfillDraftSchemasFromText(text);
 
   saveCurrentDay();
 }
@@ -5951,6 +6079,26 @@ function extractRessurser(text) {
   for (var i = 0; i < known.length; i++) {
     if (lower.indexOf(known[i]) !== -1) found.push(known[i]);
   }
+
+  // Machine MODEL designations -- "L90", "CAT 320", "PW160".
+  //
+  // P1-B: the list above is nouns only, so a worker writing "med L90" named a
+  // machine the system could not see. The founder's own example expects L90.
+  //
+  // Only recognised after "med", and that restriction does real work rather
+  // than being cautious for its own sake: a bare token like L90 is shaped
+  // exactly like the road reference RV92, which COMPLETION_LOCATION_PATTERN
+  // also matches. "med" is how a worker states equipment, while a road follows
+  // "pa" or "ved". Where the preposition does not disambiguate, nothing is
+  // extracted -- an unrecognised machine is a gap the worker fills, whereas a
+  // road misread as a machine is a wrong fact inside a safety record.
+  var withMachine = /med\s+([A-ZÆØÅ]{1,4}\s?\d{2,4})/gi;
+  var m;
+  while ((m = withMachine.exec(text)) !== null) {
+    var designation = m[1].replace(/\s+/g, " ").trim().toUpperCase();
+    if (found.indexOf(designation) === -1) found.push(designation);
+  }
+
   return found.length > 0 ? found : null;
 }
 
@@ -6126,6 +6274,101 @@ var COMPLETION_INCIDENT_KEYWORDS = (INJECTED_RUNTIME && INJECTED_RUNTIME.extract
 var COMPLETION_FUEL_KEYWORDS = (INJECTED_RUNTIME && INJECTED_RUNTIME.extractionVocabularies && INJECTED_RUNTIME.extractionVocabularies.fuelKeywords) || ["diesel", "drivstoff"];
 var COMPLETION_ORDRE_PATTERN = new RegExp((INJECTED_RUNTIME && INJECTED_RUNTIME.extractionPatterns && INJECTED_RUNTIME.extractionPatterns.ordre) || "\\b(\\d{4,}-\\d{1,4})\\b");
 var COMPLETION_LOCATION_PATTERN = new RegExp((INJECTED_RUNTIME && INJECTED_RUNTIME.extractionPatterns && INJECTED_RUNTIME.extractionPatterns.location) || "\\b([A-Z\u00c6\u00d8\u00c5]{1,3}\\d{1,4})\\b");
+
+/**
+ * A work location as a person would write it: "RV92", "RV92 km 14-18",
+ * "E6 km 3 til km 9".
+ *
+ * Built on COMPLETION_LOCATION_PATTERN so the road token stays
+ * organization-configurable rather than becoming a second, Mesta-shaped copy
+ * — the same mistake RC1-01 already corrected for ordre numbers.
+ *
+ * Returns null rather than a partial guess. A place is a factual field, and a
+ * half-recognised one is worse than an empty one the worker fills in.
+ */
+function extractStedFromText(text) {
+  var road = text.match(COMPLETION_LOCATION_PATTERN);
+  if (!road) return null;
+
+  // A km range stated either as "km 14 til km 18" or "km 14-18".
+  var range = text.match(/km\s*(\d{1,4})\s*(?:til|-|–)\s*(?:km\s*)?(\d{1,4})/i);
+  if (range) return road[1] + " km " + range[1] + "–" + range[2];
+
+  var single = text.match(/km\s*(\d{1,4})/i);
+  if (single) return road[1] + " km " + single[1];
+
+  return road[1];
+}
+
+/**
+ * The facts a triggered schema may safely inherit from the entry that caused
+ * it.
+ *
+ * P1-B: orchestrateEntry() already computed most of this and the result was
+ * then thrown away — createSchemaInstance was called with no context at all,
+ * so nothing a worker typed ever reached a schema field. This is the join that
+ * was missing, and it deliberately carries only factual identification:
+ * where, which order, which machines. Nothing here touches a judgement field.
+ */
+/**
+ * Fill empty factual fields on schemas that are still drafts, from an entry
+ * the worker just wrote.
+ *
+ * P1-B, the part that actually matters. Pre-day schemas (sja_preday,
+ * kjoretoyssjekk) are created at continueFromPreDay() -- BEFORE the worker has
+ * described any work -- so they cannot inherit anything at creation time, and
+ * nothing back-filled them afterwards. An SJA therefore sat with sted: null all
+ * day while the very next sentence said "RV92 fra km 14 til km 18". Passing a
+ * context into createSchemaInstance fixed only schemas triggered BY an entry,
+ * which for ordinary work descriptions never fire at all.
+ *
+ * Three limits, each deliberate:
+ *
+ *   - drafts only. A confirmed schema is a signed record, and editing one
+ *     behind the worker's back would be indistinguishable from tampering.
+ *   - empty fields only. A value already present was either typed by the
+ *     worker or set as an organization default, and neither is ours to replace.
+ *   - factual fields only. NEVER_AUTO_FILL is checked here as well as at
+ *     creation, because this is a second write path into the same documents
+ *     and a boundary enforced in only one of two places is not a boundary.
+ */
+function backfillDraftSchemasFromText(text) {
+  if (!dayLog || !dayLog.schemas || !dayLog.schemas.length) return;
+  var context = buildSchemaContextFromText(text);
+  if (!context.sted && !context.ressurser && !context.ordre) return;
+
+  var FACTUAL = ["sted", "oppgave", "ressurser", "kjoretoy"];
+  for (var i = 0; i < dayLog.schemas.length; i++) {
+    var schema = dayLog.schemas[i];
+    if (!schema || schema.status !== "draft" || !schema.fields) continue;
+
+    for (var f = 0; f < FACTUAL.length; f++) {
+      var key = FACTUAL[f];
+      if (NEVER_AUTO_FILL.indexOf(key) !== -1) continue;
+      if (!Object.prototype.hasOwnProperty.call(schema.fields, key)) continue;
+      if (schema.fields[key] !== null) continue;
+
+      if (key === "sted" && context.sted) schema.fields.sted = context.sted;
+      else if (key === "kjoretoy" && context.kjoretoy) schema.fields.kjoretoy = context.kjoretoy;
+      else if (key === "ressurser" && context.ressurser) schema.fields.ressurser = context.ressurser;
+      else if (key === "oppgave") {
+        if (context.ordre) schema.fields.oppgave = "Oppdrag " + context.ordre;
+        else if (context.sted) schema.fields.oppgave = context.sted;
+      }
+    }
+  }
+}
+
+function buildSchemaContextFromText(text) {
+  var ordreMatch = text.match(COMPLETION_ORDRE_PATTERN);
+  var ressurser = extractRessurser(text);
+  return {
+    ordre: ordreMatch ? ordreMatch[1] : null,
+    sted: extractStedFromText(text),
+    ressurser: ressurser && ressurser.length ? ressurser : null,
+    kjoretoy: ressurser && ressurser.length ? ressurser[0] : null
+  };
+}
 
 function extractHoursFromText(text) {
   var digitMatch = text.match(/(\d+(?:[.,]\d+)?)\s*timer?/i);
