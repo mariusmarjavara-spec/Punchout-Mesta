@@ -4,12 +4,35 @@ on:
   push:
   pull_request:
 
+# ─────────────────────────────────────────────────────────────────────────────
+# EVIDENCE TOPOLOGY
+#
+# This was one `verify` job with fifteen sequential steps. Sequential steps in
+# one job are an AND-chain over evidence: the first failure ends the job and
+# every later gate reports nothing at all. That is not a theoretical cost — it
+# already happened here. A Node-version problem in the component-test step
+# gated twelve downstream stages, including the live security audit, the relay
+# delivery chain, the real-Chromium workday and the production build. All of
+# them reported "skipped", which is not evidence of anything, and the one real
+# defect was indistinguishable from twelve unknowns.
+#
+# The jobs below are deliberately INDEPENDENT — no `needs:` between them — so a
+# cheap lint failure can no longer erase the answer to "does the relay chain
+# still work?". They pay for that with a checkout and an `npm ci` each, which is
+# the correct trade: CI minutes are cheap and unrecoverable evidence is not.
+#
+# Ordering within a job still fails fast on the cheaper check first. Nothing
+# below weakens, skips or reorders a gate relative to the monolith; the same
+# commands run, grouped by what they prove and by what they cost.
+# ─────────────────────────────────────────────────────────────────────────────
+
 jobs:
-  verify:
+  # ── Cheap, no server, no browser ──────────────────────────────────────────
+  static:
+    name: "Static: typecheck, lint, component tests"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           # 22, not 20. jsdom pulls undici 8, whose CacheStorage calls
@@ -17,15 +40,11 @@ jobs:
           # test step dies with "Failed to start forks worker" before running a
           # single test. It passed locally only because this machine runs 24.
           #
-          # The cost was not one red step: it gated twelve downstream jobs,
-          # including the live security audit, the relay delivery chain, the
-          # real-Chromium workday and the production build. Every one of them
-          # reported "skipped", which is not evidence of anything.
+          # This is the failure that motivated splitting the workflow: the cost
+          # was never one red step, it was twelve stages reporting "skipped".
           node-version: "22"
           cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
       - name: TypeScript
         run: npm run typecheck
@@ -34,24 +53,45 @@ jobs:
       # non-functional (no eslint dependency, no config file) and was never part
       # of this workflow, so nothing ever ran it. Fixed and triaged in a prior
       # commit (0 errors, 13 documented-and-accepted react-hooks/set-state-in-effect
-      # warnings); wiring it in now that it actually works and is clean. Placed
-      # after TypeScript and before the regression suite, matching this file's
-      # own "fail fast on cheaper checks first" ordering.
+      # warnings).
       - name: Lint
         run: npm run lint
-
-      - name: Regression suite (motor.js, engine, backend auth/persistence)
-        run: npm test
 
       # Post-pilot engineering baseline finding: `npm run test:components` (the
       # jsdom/React suite added alongside vitest.config.mts) existed but was
       # never wired into this workflow, so nothing ever ran it — the same class
       # of gap as the lint one documented above. It was also failing locally
       # after any production build until vitest.config.mts's exclude list was
-      # fixed to ignore .next/**. Placed with the other fast checks, before the
-      # slower live-HTTP and browser stages.
+      # fixed to ignore .next/**.
       - name: Component tests (jsdom, React UI layer)
         run: npm run test:components
+
+  # ── The pure-logic regression corpus ──────────────────────────────────────
+  core-regression:
+    name: "Core regression suite"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+
+      - name: Regression suite (motor.js, engine, backend auth/persistence, day trace)
+        run: npm test
+
+  # ── Organization packages, adapters and the Relay chain ───────────────────
+  integration:
+    name: "Integration: organizations, adapters, relay chain"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
 
       - name: Runtime validation (all organization packages, full-day scenario)
         run: node lib/regression/cross-organization.mjs
@@ -62,39 +102,61 @@ jobs:
       - name: Adapter performance (100/500/1000 export packages)
         run: node lib/regression/adapter-performance.mjs
 
+      # Operation Punchout Field Trial: the outbound half of the vertical path.
+      # Proves locked workday -> signed export -> Relay custody -> inspection ->
+      # CSV adapter -> SERVER RESTART -> readback, over live HTTP against a real
+      # server that is genuinely stopped and restarted mid-test. The restart is
+      # the point: the defect this replaced (the server verifying a workday's
+      # signature and then discarding the payload) was invisible to every
+      # in-process test that existed at the time.
+      - name: Relay delivery chain (locked day -> relay -> CSV -> restart -> readback)
+        run: node lib/regression/relay-delivery-chain.mjs
+
+  # ── Live HTTP against a real running server ───────────────────────────────
+  live-http:
+    name: "Live HTTP: security audit, runtime provisioning"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+
       - name: Security audit (live HTTP against every admin route)
         run: node lib/regression/security-audit.mjs
 
       # Operation Punchout Soft Launch, Phase B: permanent guard against the
-      # vertical-integration gap this mission found and closed this session —
-      # a real device provisioning itself and a real browser's page request
-      # both proven over live HTTP against a real running server, including
-      # cross-organization isolation (no cross-contamination) and the
-      # unprovisioned-fallback path. See lib/regression/runtime-provisioning.mjs.
+      # vertical-integration gap that mission found and closed — a real device
+      # provisioning itself and a real browser's page request both proven over
+      # live HTTP against a real running server, including cross-organization
+      # isolation (no cross-contamination) and the unprovisioned-fallback path.
       - name: Runtime provisioning (real device -> real per-org Runtime, live HTTP)
         run: node lib/regression/runtime-provisioning.mjs
 
-      # Operation Punchout Field Trial: the outbound half of the same vertical
-      # path. Proves locked workday -> signed export -> Relay custody ->
-      # inspection -> CSV adapter -> SERVER RESTART -> readback, over live HTTP
-      # against a real server that is genuinely stopped and restarted mid-test.
-      # The restart is the point: the defect this replaced (the server verifying
-      # a workday's signature and then discarding the payload) was invisible to
-      # every in-process test that existed at the time.
-      - name: Relay delivery chain (locked day -> relay -> CSV -> restart -> readback)
-        run: node lib/regression/relay-delivery-chain.mjs
+  # ── Real Chromium, real phone viewport ────────────────────────────────────
+  browser:
+    name: "Browser: workday and field readiness"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
 
-      # Operation Punchout Soft Launch, Phase B: this mission's own First
+      # Operation Punchout Soft Launch, Phase B: this engagement's First
       # Principle is "a simulated integration is not an integrated product" —
-      # every prior report in this engagement documented real browser
-      # verification as "prepared, not executed," since no browser automation
-      # tool was ever available. This session found one was available after
-      # all and used it to catch two real production bugs (a @vercel/analytics
-      # 404 on every real page load, and a module-boundary bug that silently
-      # broke Runtime delivery for the first real visitor to any deployment,
-      # forever) in a single pass — neither reachable by any other check in
-      # this file. Chromium is installed explicitly here rather than bundled
-      # as a project dependency, to avoid forcing the download on every
+      # every prior report documented real browser verification as "prepared,
+      # not executed," since no browser automation tool was ever available. One
+      # was available after all, and caught two real production bugs (a
+      # @vercel/analytics 404 on every real page load, and a module-boundary bug
+      # that silently broke Runtime delivery for the first real visitor to any
+      # deployment, forever) in a single pass — neither reachable by any other
+      # check in this file. Chromium is installed explicitly here rather than
+      # bundled as a project dependency, to avoid forcing the download on every
       # contributor's local `npm install`.
       - name: Install Chromium for browser verification
         run: npx playwright install --with-deps chromium
@@ -103,17 +165,27 @@ jobs:
         run: node lib/regression/browser-verification.mjs
 
       # Operation Punchout Field Trial: phone-viewport coverage for the paths
-      # this mission added, which did not exist when the script above was
-      # written — main hours actually ENTERED and CONFIRMED (previously
-      # impossible), that confirmed line surviving into the Relay payload, the
-      # Relay inspection page, and touch-target sizes on the new controls.
+      # that mission added — main hours actually ENTERED and CONFIRMED
+      # (previously impossible), that confirmed line surviving into the Relay
+      # payload, the Relay inspection page, and touch-target sizes.
       - name: Browser field readiness (iPhone viewport, main hours, relay)
         run: node lib/regression/browser-field-readiness.mjs
 
+  # ── The deployable artifact ───────────────────────────────────────────────
+  build:
+    name: "Build and standalone artifact"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+
       # Execution Sprint 4, Oppgave 1/6: `next build` was never run in CI before
       # this — the only way anyone would have discovered a build break was a
-      # human running it manually. Placed after the fast logic/regression
-      # checks (fail fast on cheaper checks first), before the artifact step.
+      # human running it manually.
       - name: Production build
         run: npm run build
 
@@ -134,3 +206,44 @@ jobs:
           name: punchout-standalone-build
           path: .next/standalone
           retention-days: 14
+
+  # ── The single thing to require on a branch ───────────────────────────────
+  readiness:
+    name: "Pilot readiness gate"
+    runs-on: ubuntu-latest
+    needs: [static, core-regression, integration, live-http, browser, build]
+    # `always()` is load-bearing. Without it, a failing dependency SKIPS this
+    # job rather than failing it — and a skipped required check is not a red
+    # check. The gate would go quiet at exactly the moment it is supposed to
+    # speak, which is the same class of defect as the monolith it replaces.
+    if: always()
+    steps:
+      - name: Require every gate to have passed
+        env:
+          RESULTS: >-
+            static=${{ needs.static.result }}
+            core-regression=${{ needs.core-regression.result }}
+            integration=${{ needs.integration.result }}
+            live-http=${{ needs.live-http.result }}
+            browser=${{ needs.browser.result }}
+            build=${{ needs.build.result }}
+        run: |
+          echo "Gate results: $RESULTS"
+          failed=0
+          for pair in $RESULTS; do
+            name="${pair%%=*}"
+            result="${pair#*=}"
+            # Anything that is not an outright success counts against the gate,
+            # including 'skipped' and 'cancelled'. A gate that did not run has
+            # not proven anything, and treating silence as consent is how a
+            # required check stops meaning something.
+            if [ "$result" != "success" ]; then
+              echo "::error::$name did not pass (result: $result)"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "Pilot readiness gate FAILED — see the individual jobs above."
+            exit 1
+          fi
+          echo "All required gates passed."
